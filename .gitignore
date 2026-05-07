@@ -1,0 +1,173 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VSCode
+.vscode/
+
+# Flutter / Dart / Pub
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub/
+.pub-cache/
+build/
+coverage/
+
+# Legacy Dart file (safe to keep ignored)
+.packages
+
+# Generated docs
+**/doc/api/
+
+# Flutter generated
+**/ios/Flutter/.last_build_id
+lib/generated_plugin_registrant.dart
+
+# Obfuscation / Symbols
+app.*.symbols
+app.*.map.json
+*.symbols
+
+# Android related
+**/android/.gradle
+**/android/captures/
+**/android/local.properties
+**/android/key.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# Android signing
+*.jks
+*.keystore
+
+# IMPORTANT:
+# Keep Gradle wrapper files committed
+!**/android/gradlew
+!**/android/gradlew.bat
+!**/android/gradle/wrapper/gradle-wrapper.jar
+!**/android/gradle/wrapper/gradle-wrapper.properties
+
+# iOS related
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+
+**/ios/.generated/
+
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/GeneratedPluginRegistrant.h
+**/ios/Flutter/GeneratedPluginRegistrant.m
+
+# Exceptions
+!**/ios/**/default.mode1v3
+!**/ios/**/default.mode2v3
+!**/ios/**/default.pbxuser
+!**/ios/**/default.perspectivev3
+
+# macOS related
+**/macos/**/*.mode1v3
+**/macos/**/*.mode2v3
+**/macos/**/*.moved-aside
+**/macos/**/*.pbxuser
+**/macos/**/*.perspectivev3
+**/macos/**/*sync/
+**/macos/**/.sconsign.dblite
+**/macos/**/.tags*
+**/macos/**/.vagrant/
+**/macos/**/DerivedData/
+**/macos/**/Icon?
+**/macos/**/Pods/
+**/macos/**/.symlinks/
+**/macos/**/profile
+**/macos/**/xcuserdata
+
+**/macos/.generated/
+
+**/macos/Flutter/App.framework
+**/macos/Flutter/Flutter.framework
+**/macos/Flutter/Flutter.podspec
+**/macos/Flutter/Generated.xcconfig
+**/macos/Flutter/app.flx
+**/macos/Flutter/app.zip
+**/macos/Flutter/flutter_assets/
+**/macos/Flutter/flutter_export_environment.sh
+**/macos/Flutter/GeneratedPluginRegistrant.h
+**/macos/Flutter/GeneratedPluginRegistrant.m
+
+# Exceptions
+!**/macos/**/default.mode1v3
+!**/macos/**/default.mode2v3
+!**/macos/**/default.pbxuser
+!**/macos/**/default.perspectivev3
+
+# Windows related
+**/windows/**/*.exe
+**/windows/**/*.exe~
+**/windows/**/*.pdb
+**/windows/**/*.exp
+
+**/windows/**/GeneratedPluginRegistrant.h
+**/windows/**/GeneratedPluginRegistrant.cc
+
+**/windows/**/flutter/
+**/windows/**/flutter/ephemeral/
+
+# Linux related
+**/linux/**/flutter/
+**/linux/**/flutter/ephemeral/
+
+**/linux/**/GeneratedPluginRegistrant.h
+**/linux/**/GeneratedPluginRegistrant.cc
+
+# Keep plugin symlink binaries
+!**/linux/**/flutter/ephemeral/.plugin_symlinks/**/linux/**/*.so
+
+# Optional tooling
+.fvm/
+.melos_tool/
+
+# Firebase
+firebase-debug.log
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots/
+
+# Crashlytics
+crashlytics-build.properties

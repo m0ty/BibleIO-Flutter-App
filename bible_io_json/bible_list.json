@@ -1,0 +1,21 @@
+[
+  "bible_io_json/Arabic/arb-svd-1865.json",
+  "bible_io_json/Chinese/zho-cuv-trad-shen.json",
+  "bible_io_json/Chinese/zho-ncv-trad-shen.json",
+  "bible_io_json/English/eng-bbe-1965.json",
+  "bible_io_json/English/eng-kjv-1769.json",
+  "bible_io_json/Esperanto/epo-londona-1926-x.json",
+  "bible_io_json/Finnish/fin-biblia-1776.json",
+  "bible_io_json/Finnish/fin-kr92-1992.json",
+  "bible_io_json/French/fra-epee-2010-vm.json",
+  "bible_io_json/German/deu-elberfelder-1871.json",
+  "bible_io_json/Greek/ell-vamvas-1850.json",
+  "bible_io_json/Korean/kor-krv-1938.json",
+  "bible_io_json/Portuguese/por-aa.json",
+  "bible_io_json/Portuguese/por-acf.json",
+  "bible_io_json/Portuguese/por-nvi-br.json",
+  "bible_io_json/Romanian/ron-cornilescu-1924.json",
+  "bible_io_json/Russian/rus-synodal-1876.json",
+  "bible_io_json/Spanish/spa-rva-1602.json",
+  "bible_io_json/Vietnamese/vie-btt-1934.json"
+]
