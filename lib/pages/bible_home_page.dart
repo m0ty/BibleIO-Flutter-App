@@ -167,7 +167,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bible Reader'),
+        title: const Text('BibleIO Viewer'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,

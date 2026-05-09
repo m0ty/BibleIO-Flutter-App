@@ -16,6 +16,11 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
+set_target_properties(${BINARY_NAME} PROPERTIES
+  RUNTIME_OUTPUT_NAME_PROFILE "${EXECUTABLE_NAME}"
+  RUNTIME_OUTPUT_NAME_RELEASE "${EXECUTABLE_NAME}"
+)
+
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})

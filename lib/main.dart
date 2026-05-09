@@ -62,7 +62,7 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
     );
 
     return MaterialApp(
-      title: 'Bible Reader',
+      title: 'BibleIO Viewer',
       theme: ThemeData(
         colorScheme: lightColorScheme,
         useMaterial3: true,

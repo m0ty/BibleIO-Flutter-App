@@ -1,10 +1,11 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(flutter_bible LANGUAGES CXX)
+project(bibleio_viewer LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "flutter_bible")
+set(BINARY_NAME "bibleio_viewer")
+set(EXECUTABLE_NAME "BibleIO Viewer")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

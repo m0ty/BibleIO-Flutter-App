@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "flutter_bible" "\0"
+            VALUE "FileDescription", "BibleIO Viewer" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "flutter_bible" "\0"
+            VALUE "InternalName", "BibleIO Viewer" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "flutter_bible.exe" "\0"
-            VALUE "ProductName", "flutter_bible" "\0"
+            VALUE "OriginalFilename", "BibleIO Viewer.exe" "\0"
+            VALUE "ProductName", "BibleIO Viewer" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
