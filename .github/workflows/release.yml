@@ -1,0 +1,183 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'Release-*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-desktop:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build_os: linux
+            build_cmd: flutter build linux --release
+            artifact_path: build/linux/x64/release/bundle
+            artifact_name: BibleIO-Linux
+
+          - os: windows-latest
+            build_os: windows
+            build_cmd: flutter build windows --release
+            artifact_path: build/windows/x64/runner/Release
+            artifact_name: BibleIO-Windows
+
+          - os: macos-latest
+            build_os: macos
+            build_cmd: flutter build macos --release
+            artifact_path: build/macos/Build/Products/Release
+            artifact_name: BibleIO-macOS
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.build_os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build ${{ matrix.build_os }}
+        run: ${{ matrix.build_cmd }}
+
+      - name: Create artifact directory
+        shell: bash
+        run: mkdir -p "$GITHUB_WORKSPACE/release_artifacts"
+
+      - name: Zip ${{ matrix.build_os }} build
+        shell: bash
+        run: |
+          if [ -d "${{ matrix.artifact_path }}" ]; then
+            cd "${{ matrix.artifact_path }}"
+
+            if [ "${{ matrix.build_os }}" = "windows" ]; then
+              7z a -r "$GITHUB_WORKSPACE/release_artifacts/${{ matrix.artifact_name }}.zip" .
+            else
+              zip -r "$GITHUB_WORKSPACE/release_artifacts/${{ matrix.artifact_name }}.zip" .
+            fi
+          else
+            echo "Artifact path not found: ${{ matrix.artifact_path }}"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release_artifacts/${{ matrix.artifact_name }}.zip
+
+  build-web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build web
+        run: flutter build web --release
+
+      - name: Zip web build
+        run: |
+          mkdir -p release_artifacts
+          cd build/web
+          zip -r "$GITHUB_WORKSPACE/release_artifacts/BibleIO-Web.zip" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BibleIO-Web
+          path: release_artifacts/BibleIO-Web.zip
+
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Create artifact directory
+        run: mkdir -p release_artifacts
+
+      - name: Copy APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk release_artifacts/BibleIO-Android.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BibleIO-Android
+          path: release_artifacts/BibleIO-Android.apk
+
+  create-release:
+    needs:
+      - build-desktop
+      - build-web
+      - build-android
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all_artifacts
+
+      - name: Show downloaded artifacts
+        run: find all_artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            all_artifacts/**/*.zip
+            all_artifacts/**/*.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
