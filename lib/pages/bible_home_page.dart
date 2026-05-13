@@ -8,6 +8,9 @@ import 'settings_page.dart';
 const _kLastBookIndexKey = 'last_book_index';
 const _kLastChapterKey = 'last_chapter';
 const _kBibleFilePathKey = 'bible_file_path';
+const _kBibleTextSizeKey = 'bible_text_size';
+const _kShowVersesInlineKey = 'show_verses_inline';
+const double _kDefaultBibleTextSize = 16.0;
 
 class BibleHomePage extends StatefulWidget {
   const BibleHomePage({
@@ -30,6 +33,8 @@ class _BibleHomePageState extends State<BibleHomePage> {
   Book? _selectedBook;
   int _selectedChapter = 1;
   String _selectedBiblePath = 'bible_io_json/English/eng-kjv-1769.json';
+  double _bibleTextSize = _kDefaultBibleTextSize;
+  bool _showVersesInline = false;
 
   @override
   void initState() {
@@ -45,6 +50,9 @@ class _BibleHomePageState extends State<BibleHomePage> {
           prefs.getString(_kBibleFilePathKey) ??
           _selectedBiblePath;
       _selectedBiblePath = savedBiblePath;
+      _bibleTextSize =
+          prefs.getDouble(_kBibleTextSizeKey) ?? _kDefaultBibleTextSize;
+      _showVersesInline = prefs.getBool(_kShowVersesInlineKey) ?? false;
       _bible = await loadBibleAsset(savedBiblePath);
       final lastBookIndex = prefs.getInt(_kLastBookIndexKey) ?? 0;
       final lastChapter = prefs.getInt(_kLastChapterKey) ?? 1;
@@ -82,6 +90,22 @@ class _BibleHomePageState extends State<BibleHomePage> {
       _error = null;
     });
     await _loadBible(biblePath);
+  }
+
+  Future<void> _setBibleTextSize(double textSize) async {
+    setState(() {
+      _bibleTextSize = textSize;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kBibleTextSizeKey, textSize);
+  }
+
+  Future<void> _setShowVersesInline(bool showInline) async {
+    setState(() {
+      _showVersesInline = showInline;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kShowVersesInlineKey, showInline);
   }
 
   void _openSearchResult(Book book, int chapter) {
@@ -348,6 +372,10 @@ class _BibleHomePageState extends State<BibleHomePage> {
                     onBiblePathChanged: (path) {
                       _setBiblePath(path);
                     },
+                    bibleTextSize: _bibleTextSize,
+                    onBibleTextSizeChanged: _setBibleTextSize,
+                    showVersesInline: _showVersesInline,
+                    onShowVersesInlineChanged: _setShowVersesInline,
                   ),
                 ),
               );
@@ -457,6 +485,39 @@ class _BibleHomePageState extends State<BibleHomePage> {
     }
 
     final chapter = _bible![(_selectedBook!.bookEnum, _selectedChapter)];
+    if (_showVersesInline) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: RichText(
+          text: TextSpan(
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodyLarge?.color,
+              fontSize: _bibleTextSize,
+              height: 1.45,
+            ),
+            children: [
+              for (var index = 0; index < chapter.verses.length; index++) ...[
+                TextSpan(
+                  text: '${index + 1}: ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                TextSpan(
+                  text: '${chapter.verses[index].text} ',
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                    fontSize: _bibleTextSize,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: chapter.verses.length,
@@ -469,6 +530,8 @@ class _BibleHomePageState extends State<BibleHomePage> {
             text: TextSpan(
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color,
+                fontSize: _bibleTextSize,
+                height: 1.45,
               ),
               children: [
                 TextSpan(
@@ -482,6 +545,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
                   text: verse.text,
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodyLarge?.color,
+                    fontSize: _bibleTextSize,
                   ),
                 ),
               ],
