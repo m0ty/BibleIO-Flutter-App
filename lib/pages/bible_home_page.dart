@@ -35,6 +35,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
   String _selectedBiblePath = 'bible_io_json/English/eng-kjv-1769.json';
   double _bibleTextSize = _kDefaultBibleTextSize;
   bool _showVersesInline = false;
+  bool _isSidebarVisible = true;
 
   @override
   void initState() {
@@ -191,6 +192,15 @@ class _BibleHomePageState extends State<BibleHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          tooltip: _isSidebarVisible ? 'Hide navigation' : 'Show navigation',
+          onPressed: () {
+            setState(() {
+              _isSidebarVisible = !_isSidebarVisible;
+            });
+          },
+        ),
         title: const Text('BibleIO Viewer'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -217,10 +227,11 @@ class _BibleHomePageState extends State<BibleHomePage> {
       ),
       body: Row(
         children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.2,
-            child: _buildSidebar(context),
-          ),
+          if (_isSidebarVisible)
+            SizedBox(
+              width: MediaQuery.of(context).size.width * 0.2,
+              child: _buildSidebar(context),
+            ),
           Expanded(
             child: Container(
               color: Theme.of(context).colorScheme.surface,
