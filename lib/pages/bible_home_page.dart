@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bible_io/bible_io.dart';
+import '../models/bible_color_preset.dart';
 import '../services/bible_loader.dart';
 import 'search_page.dart';
 import 'settings_page.dart';
@@ -15,12 +16,18 @@ const double _kDefaultBibleTextSize = 16.0;
 class BibleHomePage extends StatefulWidget {
   const BibleHomePage({
     super.key,
-    required this.themeMode,
-    required this.onThemeModeChanged,
+    required this.colorPresets,
+    required this.selectedColorPreset,
+    required this.onColorPresetChanged,
+    required this.onCustomColorPresetSaved,
+    required this.onCustomColorPresetDeleted,
   });
 
-  final ThemeMode themeMode;
-  final ValueChanged<ThemeMode> onThemeModeChanged;
+  final List<BibleColorPreset> colorPresets;
+  final BibleColorPreset selectedColorPreset;
+  final ValueChanged<BibleColorPreset> onColorPresetChanged;
+  final ValueChanged<BibleColorPreset> onCustomColorPresetSaved;
+  final ValueChanged<BibleColorPreset> onCustomColorPresetDeleted;
 
   @override
   State<BibleHomePage> createState() => _BibleHomePageState();
@@ -234,7 +241,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
             ),
           Expanded(
             child: Container(
-              color: Theme.of(context).colorScheme.surface,
+              color: widget.selectedColorPreset.backgroundColor,
               child: _buildMainContent(context),
             ),
           ),
@@ -250,10 +257,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Text(
-              'Books',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            child: Text('Books', style: Theme.of(context).textTheme.titleLarge),
           ),
           Expanded(
             child: _bible == null
@@ -269,9 +273,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
                         children: [
                           Container(
                             color: isSelected
-                                ? Theme.of(
-                                    context,
-                                  ).colorScheme.primaryContainer
+                                ? Theme.of(context).colorScheme.primaryContainer
                                 : Colors.transparent,
                             child: ListTile(
                               title: Text(
@@ -334,9 +336,9 @@ class _BibleHomePageState extends State<BibleHomePage> {
                                           ? Theme.of(
                                               context,
                                             ).colorScheme.onPrimary
-                                          : Theme.of(context)
-                                                .colorScheme
-                                                .onSecondaryContainer,
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSecondaryContainer,
                                       minimumSize: const Size(48, 40),
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 4,
@@ -377,8 +379,12 @@ class _BibleHomePageState extends State<BibleHomePage> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => SettingsPage(
-                    themeMode: widget.themeMode,
-                    onThemeModeChanged: widget.onThemeModeChanged,
+                    colorPresets: widget.colorPresets,
+                    selectedColorPreset: widget.selectedColorPreset,
+                    onColorPresetChanged: widget.onColorPresetChanged,
+                    onCustomColorPresetSaved: widget.onCustomColorPresetSaved,
+                    onCustomColorPresetDeleted:
+                        widget.onCustomColorPresetDeleted,
                     selectedBiblePath: _selectedBiblePath,
                     onBiblePathChanged: (path) {
                       _setBiblePath(path);
@@ -408,11 +414,13 @@ class _BibleHomePageState extends State<BibleHomePage> {
       return const Center(child: Text('Select a book'));
     }
 
+    final colorPreset = widget.selectedColorPreset;
+
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(16.0),
-          color: Theme.of(context).colorScheme.surface,
+          color: colorPreset.backgroundColor,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -421,16 +429,16 @@ class _BibleHomePageState extends State<BibleHomePage> {
                 children: [
                   Text(
                     _selectedBook!.name,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colorPreset.textColor,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     'Chapter $_selectedChapter',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: colorPreset.textColor.withValues(alpha: 0.82),
+                    ),
                   ),
                 ],
               ),
@@ -438,12 +446,13 @@ class _BibleHomePageState extends State<BibleHomePage> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left),
-                    onPressed:
-                        _hasPreviousChapter ? _previousChapter : null,
+                    color: colorPreset.textColor,
+                    onPressed: _hasPreviousChapter ? _previousChapter : null,
                     tooltip: 'Previous chapter',
                   ),
                   IconButton(
                     icon: const Icon(Icons.chevron_right),
+                    color: colorPreset.textColor,
                     onPressed: _hasNextChapter ? _nextChapter : null,
                     tooltip: 'Next chapter',
                   ),
@@ -469,10 +478,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 16),
-            Text(
-              _error ?? 'Unknown error',
-              textAlign: TextAlign.center,
-            ),
+            Text(_error ?? 'Unknown error', textAlign: TextAlign.center),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
@@ -502,7 +508,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
         child: RichText(
           text: TextSpan(
             style: TextStyle(
-              color: Theme.of(context).textTheme.bodyLarge?.color,
+              color: widget.selectedColorPreset.textColor,
               fontSize: _bibleTextSize,
               height: 1.45,
             ),
@@ -512,13 +518,13 @@ class _BibleHomePageState extends State<BibleHomePage> {
                   text: '${index + 1}: ',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
+                    color: widget.selectedColorPreset.verseNumberColor,
                   ),
                 ),
                 TextSpan(
                   text: '${chapter.verses[index].text} ',
                   style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                    color: widget.selectedColorPreset.textColor,
                     fontSize: _bibleTextSize,
                   ),
                 ),
@@ -540,7 +546,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
           child: RichText(
             text: TextSpan(
               style: TextStyle(
-                color: Theme.of(context).textTheme.bodyLarge?.color,
+                color: widget.selectedColorPreset.textColor,
                 fontSize: _bibleTextSize,
                 height: 1.45,
               ),
@@ -549,13 +555,13 @@ class _BibleHomePageState extends State<BibleHomePage> {
                   text: '$verseNum: ',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
+                    color: widget.selectedColorPreset.verseNumberColor,
                   ),
                 ),
                 TextSpan(
                   text: verse.text,
                   style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                    color: widget.selectedColorPreset.textColor,
                     fontSize: _bibleTextSize,
                   ),
                 ),
