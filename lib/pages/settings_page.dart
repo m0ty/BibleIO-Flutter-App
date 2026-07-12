@@ -114,10 +114,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (catalog != null) {
       for (final source in catalog.sources) {
         if (source.assetPath == path) {
-          final partial = source.additional['contentStatus'] == 'partial'
-              ? ' · partial content'
-              : '';
-          return '${source.languageName} · ${source.translationName}$partial';
+          return '${source.languageName} · ${source.translationName}';
         }
       }
     }

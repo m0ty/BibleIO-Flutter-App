@@ -78,15 +78,7 @@ void main() {
     },
   );
 
-  test('known partial-edition policy is narrow and preserves UTF-8', () async {
-    expect(isPartialBibleAsset(_chineseNcvPath), isTrue);
-    expect(isPartialBibleAsset(_koreanKrvPath), isTrue);
-    expect(isPartialBibleAsset(_kjvPath), isFalse);
-    expect(
-      isPartialBibleAsset(r'.\bible_io_json\Chinese\zho-ncv-trad-shen.json'),
-      isTrue,
-    );
-
+  test('repaired Chinese NCV loads strictly and preserves UTF-8', () async {
     final bible = await loadBibleAsset(
       _chineseNcvPath,
       source: bibleSourceForAsset(catalog, _chineseNcvPath),
@@ -98,23 +90,33 @@ void main() {
     expect(firstVerse.text, isNot(contains(String.fromCharCode(0x00c3))));
     expect(songOfSolomon.chapters, hasLength(8));
     expect(
-      songOfSolomon.chapters.every((chapter) => chapter.verses.isEmpty),
+      songOfSolomon.chapters.every((chapter) => chapter.verses.isNotEmpty),
       isTrue,
+    );
+    expect(
+      songOfSolomon.chapters.fold<int>(
+        0,
+        (count, chapter) => count + chapter.verses.length,
+      ),
+      117,
     );
     expect(bible.searchIndexMode, SearchIndexMode.lazy);
     expect(bible.hasSearchIndex, isFalse);
   });
 
   test(
-    'Korean partial edition loads only through its explicit policy',
+    'repaired Korean KRV chapters load strictly with complete text',
     () async {
       final bible = await loadBibleAsset(
         _koreanKrvPath,
         source: bibleSourceForAsset(catalog, _koreanKrvPath),
       );
 
-      expect(bible.getChapter(BibleBookEnum.job, 42).verses, isEmpty);
-      expect(bible.getChapter(BibleBookEnum.firstPeter, 5).verses, isEmpty);
+      expect(bible.getChapter(BibleBookEnum.job, 42).verses, hasLength(17));
+      expect(
+        bible.getChapter(BibleBookEnum.firstPeter, 5).verses,
+        hasLength(14),
+      );
       expect(
         bible.getVerse(BibleBookEnum.genesis, 1, 1).text,
         contains(String.fromCharCode(0xd558)),

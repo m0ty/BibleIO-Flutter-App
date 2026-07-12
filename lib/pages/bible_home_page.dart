@@ -1288,15 +1288,6 @@ class _BibleSourcePickerState extends State<_BibleSourcePicker> {
                                     : const Icon(Icons.menu_book_outlined),
                                 title: Text(source.translationName),
                                 subtitle: Text(source.abbreviation),
-                                trailing: isPartialBibleAsset(source.assetPath)
-                                    ? const Tooltip(
-                                        message:
-                                            'Some chapters are unavailable in this bundled edition',
-                                        child: Icon(
-                                          Icons.warning_amber_rounded,
-                                        ),
-                                      )
-                                    : null,
                                 onTap: () => Navigator.pop(context, source),
                               ),
                           ],

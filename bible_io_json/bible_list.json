@@ -23,8 +23,7 @@
     "languageName": "Chinese",
     "languageCode": "zh",
     "translationName": "New Chinese Version (Traditional)",
-    "abbreviation": "NCV",
-    "contentStatus": "partial"
+    "abbreviation": "NCV"
   },
   {
     "id": "eng-bbe-1965",
@@ -105,8 +104,7 @@
     "languageCode": "ko",
     "translationName": "Korean Revised Version",
     "abbreviation": "KRV",
-    "year": 1938,
-    "contentStatus": "partial"
+    "year": 1938
   },
   {
     "id": "por-aa",
