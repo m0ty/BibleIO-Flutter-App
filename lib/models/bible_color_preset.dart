@@ -94,7 +94,7 @@ const List<BibleColorPreset> builtInBibleColorPresets = [
     id: 'solarized_light',
     name: 'Solarized Light',
     backgroundColor: Color(0xFFFDF6E3),
-    textColor: Color(0xFF657B83),
+    textColor: Color(0xFF455B62),
     isBuiltIn: true,
   ),
   BibleColorPreset(

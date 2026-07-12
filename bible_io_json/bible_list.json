@@ -1,21 +1,171 @@
 [
-  "bible_io_json/Arabic/arb-svd-1865.json",
-  "bible_io_json/Chinese/zho-cuv-trad-shen.json",
-  "bible_io_json/Chinese/zho-ncv-trad-shen.json",
-  "bible_io_json/English/eng-bbe-1965.json",
-  "bible_io_json/English/eng-kjv-1769.json",
-  "bible_io_json/Esperanto/epo-londona-1926-x.json",
-  "bible_io_json/Finnish/fin-biblia-1776.json",
-  "bible_io_json/Finnish/fin-kr92-1992.json",
-  "bible_io_json/French/fra-epee-2010-vm.json",
-  "bible_io_json/German/deu-elberfelder-1871.json",
-  "bible_io_json/Greek/ell-vamvas-1850.json",
-  "bible_io_json/Korean/kor-krv-1938.json",
-  "bible_io_json/Portuguese/por-aa.json",
-  "bible_io_json/Portuguese/por-acf.json",
-  "bible_io_json/Portuguese/por-nvi-br.json",
-  "bible_io_json/Romanian/ron-cornilescu-1924.json",
-  "bible_io_json/Russian/rus-synodal-1876.json",
-  "bible_io_json/Spanish/spa-rva-1602.json",
-  "bible_io_json/Vietnamese/vie-btt-1934.json"
+  {
+    "id": "arb-svd-1865",
+    "assetPath": "bible_io_json/Arabic/arb-svd-1865.json",
+    "languageName": "Arabic",
+    "languageCode": "ar",
+    "translationName": "Smith-Van Dyck Bible",
+    "abbreviation": "SVD",
+    "year": 1865,
+    "direction": "rtl"
+  },
+  {
+    "id": "zho-cuv-trad-shen",
+    "assetPath": "bible_io_json/Chinese/zho-cuv-trad-shen.json",
+    "languageName": "Chinese",
+    "languageCode": "zh",
+    "translationName": "Chinese Union Version (Traditional)",
+    "abbreviation": "CUV"
+  },
+  {
+    "id": "zho-ncv-trad-shen",
+    "assetPath": "bible_io_json/Chinese/zho-ncv-trad-shen.json",
+    "languageName": "Chinese",
+    "languageCode": "zh",
+    "translationName": "New Chinese Version (Traditional)",
+    "abbreviation": "NCV",
+    "contentStatus": "partial"
+  },
+  {
+    "id": "eng-bbe-1965",
+    "assetPath": "bible_io_json/English/eng-bbe-1965.json",
+    "languageName": "English",
+    "languageCode": "en",
+    "translationName": "Bible in Basic English",
+    "abbreviation": "BBE",
+    "year": 1965
+  },
+  {
+    "id": "eng-kjv-1769",
+    "assetPath": "bible_io_json/English/eng-kjv-1769.json",
+    "languageName": "English",
+    "languageCode": "en",
+    "translationName": "King James Version",
+    "abbreviation": "KJV",
+    "year": 1769
+  },
+  {
+    "id": "epo-londona-1926-x",
+    "assetPath": "bible_io_json/Esperanto/epo-londona-1926-x.json",
+    "languageName": "Esperanto",
+    "languageCode": "eo",
+    "translationName": "La Sankta Biblio - Londona eldono",
+    "abbreviation": "LONDONA",
+    "year": 1926
+  },
+  {
+    "id": "fin-biblia-1776",
+    "assetPath": "bible_io_json/Finnish/fin-biblia-1776.json",
+    "languageName": "Finnish",
+    "languageCode": "fi",
+    "translationName": "Biblia 1776",
+    "abbreviation": "BIBLIA",
+    "year": 1776
+  },
+  {
+    "id": "fin-kr92-1992",
+    "assetPath": "bible_io_json/Finnish/fin-kr92-1992.json",
+    "languageName": "Finnish",
+    "languageCode": "fi",
+    "translationName": "Kirkkoraamattu 1992",
+    "abbreviation": "KR92",
+    "year": 1992
+  },
+  {
+    "id": "fra-epee-2010-vm",
+    "assetPath": "bible_io_json/French/fra-epee-2010-vm.json",
+    "languageName": "French",
+    "languageCode": "fr",
+    "translationName": "Bible de l'Epee - Version Marginale",
+    "abbreviation": "EPEE",
+    "year": 2010
+  },
+  {
+    "id": "deu-elberfelder-1871",
+    "assetPath": "bible_io_json/German/deu-elberfelder-1871.json",
+    "languageName": "German",
+    "languageCode": "de",
+    "translationName": "Elberfelder Bibel",
+    "abbreviation": "ELB",
+    "year": 1871
+  },
+  {
+    "id": "ell-vamvas-1850",
+    "assetPath": "bible_io_json/Greek/ell-vamvas-1850.json",
+    "languageName": "Greek",
+    "languageCode": "el",
+    "translationName": "Vamvas Bible",
+    "abbreviation": "VAMVAS",
+    "year": 1850
+  },
+  {
+    "id": "kor-krv-1938",
+    "assetPath": "bible_io_json/Korean/kor-krv-1938.json",
+    "languageName": "Korean",
+    "languageCode": "ko",
+    "translationName": "Korean Revised Version",
+    "abbreviation": "KRV",
+    "year": 1938,
+    "contentStatus": "partial"
+  },
+  {
+    "id": "por-aa",
+    "assetPath": "bible_io_json/Portuguese/por-aa.json",
+    "languageName": "Portuguese",
+    "languageCode": "pt",
+    "translationName": "Almeida Atualizada",
+    "abbreviation": "AA"
+  },
+  {
+    "id": "por-acf",
+    "assetPath": "bible_io_json/Portuguese/por-acf.json",
+    "languageName": "Portuguese",
+    "languageCode": "pt",
+    "translationName": "Almeida Corrigida Fiel",
+    "abbreviation": "ACF"
+  },
+  {
+    "id": "por-nvi-br",
+    "assetPath": "bible_io_json/Portuguese/por-nvi-br.json",
+    "languageName": "Portuguese",
+    "languageCode": "pt",
+    "translationName": "Nova Versao Internacional (Brazil)",
+    "abbreviation": "NVI"
+  },
+  {
+    "id": "ron-cornilescu-1924",
+    "assetPath": "bible_io_json/Romanian/ron-cornilescu-1924.json",
+    "languageName": "Romanian",
+    "languageCode": "ro",
+    "translationName": "Dumitru Cornilescu",
+    "abbreviation": "VDC",
+    "year": 1924
+  },
+  {
+    "id": "rus-synodal-1876",
+    "assetPath": "bible_io_json/Russian/rus-synodal-1876.json",
+    "languageName": "Russian",
+    "languageCode": "ru",
+    "translationName": "Russian Synodal Translation",
+    "abbreviation": "RST",
+    "year": 1876
+  },
+  {
+    "id": "spa-rva-1602",
+    "assetPath": "bible_io_json/Spanish/spa-rva-1602.json",
+    "languageName": "Spanish",
+    "languageCode": "es",
+    "translationName": "Reina-Valera Antigua",
+    "abbreviation": "RVA",
+    "year": 1602
+  },
+  {
+    "id": "vie-btt-1934",
+    "assetPath": "bible_io_json/Vietnamese/vie-btt-1934.json",
+    "languageName": "Vietnamese",
+    "languageCode": "vi",
+    "translationName": "Kinh Thanh - Ban Truyen Thong",
+    "abbreviation": "BTT",
+    "year": 1934
+  }
 ]

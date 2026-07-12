@@ -1,12 +1,11 @@
-import 'dart:convert';
-
+import 'package:bible_io/bible_io.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/bible_color_preset.dart';
 
-const _kAppName = 'BibleIO Viewer';
+const _kAppName = 'BibleIO Reader';
 const _kAppLicense = 'GNU Affero General Public License v3.0';
 const _kAppMaker = 'Moty Fainer';
 
@@ -24,6 +23,8 @@ class SettingsPage extends StatefulWidget {
     required this.onBibleTextSizeChanged,
     required this.showVersesInline,
     required this.onShowVersesInlineChanged,
+    this.bible,
+    this.bibleCatalog,
   });
 
   final List<BibleColorPreset> colorPresets;
@@ -37,6 +38,8 @@ class SettingsPage extends StatefulWidget {
   final ValueChanged<double> onBibleTextSizeChanged;
   final bool showVersesInline;
   final ValueChanged<bool> onShowVersesInlineChanged;
+  final Bible? bible;
+  final BibleCatalog? bibleCatalog;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -50,6 +53,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late Color _editingBackgroundColor;
   late Color _editingTextColor;
   late final Future<PackageInfo> _packageInfo;
+  late final Future<List<String>> _bibleFiles;
+  late String _selectedBiblePath;
 
   @override
   void initState() {
@@ -61,6 +66,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _editingBackgroundColor = _selectedColorPreset.backgroundColor;
     _editingTextColor = _selectedColorPreset.textColor;
     _packageInfo = PackageInfo.fromPlatform();
+    _selectedBiblePath = widget.selectedBiblePath;
+    _bibleFiles = _loadBibleFiles();
   }
 
   @override
@@ -77,13 +84,19 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<List<String>> _loadBibleFiles() async {
+    final catalog = widget.bibleCatalog;
+    if (catalog != null) {
+      return catalog.sources
+          .map((source) => source.assetPath)
+          .toList(growable: false);
+    }
     try {
-      final manifestJson = await rootBundle.loadString(
+      final loadedCatalog = await BibleCatalog.loadAsset(
+        rootBundle,
         'bible_io_json/bible_list.json',
       );
-      final files = (json.decode(manifestJson) as List<dynamic>)
-          .cast<String>()
-          .where((path) => path.toLowerCase().endsWith('.json'))
+      final files = loadedCatalog.sources
+          .map((source) => source.assetPath)
           .toList();
       files.sort();
       if (files.isNotEmpty) {
@@ -97,6 +110,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   String _labelForPath(String path) {
+    final catalog = widget.bibleCatalog;
+    if (catalog != null) {
+      for (final source in catalog.sources) {
+        if (source.assetPath == path) {
+          final partial = source.additional['contentStatus'] == 'partial'
+              ? ' · partial content'
+              : '';
+          return '${source.languageName} · ${source.translationName}$partial';
+        }
+      }
+    }
     final parts = path.split('/');
     if (parts.length >= 3) {
       return '${parts[1]} / ${parts[2]}';
@@ -107,8 +131,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final tabColor = colorScheme.onPrimary;
-    final unselectedTabColor = colorScheme.onPrimary.withValues(alpha: 0.72);
+    final tabColor = colorScheme.primary;
+    final unselectedTabColor = colorScheme.onSurfaceVariant;
 
     return DefaultTabController(
       length: 3,
@@ -116,9 +140,11 @@ class _SettingsPageState extends State<SettingsPage> {
         appBar: AppBar(
           title: const Text('Settings'),
           bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: tabColor,
             unselectedLabelColor: unselectedTabColor,
-            indicatorColor: tabColor,
+            indicatorColor: colorScheme.primary,
             tabs: const [
               Tab(icon: Icon(Icons.tune), text: 'General'),
               Tab(icon: Icon(Icons.format_size), text: 'Display'),
@@ -140,126 +166,173 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildGeneralSettings(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Bible Source',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      child: _settingsPane([
+        const Text(
+          'Bible Translation',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        if (widget.bible != null) ...[
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.auto_stories_rounded, size: 34),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.bible!.translationName ??
+                              widget.bible!.metadata.id ??
+                              'Current translation',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${widget.bible!.languageName ?? widget.bible!.language.name} · '
+                          '${widget.bible!.stats.bookCount} books · '
+                          '${widget.bible!.stats.chapterCount} chapters',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (widget.bible!.description
+                            case final description?) ...[
+                          const SizedBox(height: 8),
+                          Text(description),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          Text('Current: ${_labelForPath(widget.selectedBiblePath)}'),
-          const SizedBox(height: 12),
-          FutureBuilder<List<String>>(
-            future: _loadBibleFiles(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final bibleFiles = snapshot.data ?? [];
-              if (bibleFiles.isEmpty) {
-                return const Center(child: Text('No bible files found.'));
-              }
-              return DropdownButtonFormField<String>(
-                initialValue: widget.selectedBiblePath,
-                decoration: const InputDecoration(
-                  labelText: 'Select Bible file',
-                  border: OutlineInputBorder(),
-                ),
-                items: bibleFiles
-                    .map(
-                      (path) => DropdownMenuItem(
-                        value: path,
-                        child: Text(_labelForPath(path)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (path) {
-                  if (path != null && path != widget.selectedBiblePath) {
-                    widget.onBiblePathChanged(path);
-                    Navigator.pop(context);
-                  }
-                },
-              );
-            },
-          ),
+          const SizedBox(height: 16),
         ],
-      ),
+        Text('Current: ${_labelForPath(_selectedBiblePath)}'),
+        const SizedBox(height: 12),
+        FutureBuilder<List<String>>(
+          future: _bibleFiles,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final bibleFiles = snapshot.data ?? [];
+            if (bibleFiles.isEmpty) {
+              return const Center(child: Text('No bible files found.'));
+            }
+            return DropdownButtonFormField<String>(
+              initialValue: _selectedBiblePath,
+              decoration: const InputDecoration(
+                labelText: 'Translation',
+                border: OutlineInputBorder(),
+              ),
+              items: bibleFiles
+                  .map(
+                    (path) => DropdownMenuItem(
+                      value: path,
+                      child: Text(_labelForPath(path)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (path) {
+                if (path != null && path != _selectedBiblePath) {
+                  setState(() => _selectedBiblePath = path);
+                  widget.onBiblePathChanged(path);
+                }
+              },
+            );
+          },
+        ),
+      ]),
     );
   }
 
   Widget _buildDisplaySettings(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Bible Text',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      child: _settingsPane([
+        const Text(
+          'Bible Text',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Text size'),
+            Text('${_bibleTextSize.round()} pt'),
+          ],
+        ),
+        Slider(
+          key: const Key('bible_text_size_slider'),
+          value: _bibleTextSize,
+          min: 12,
+          max: 28,
+          divisions: 16,
+          label: '${_bibleTextSize.round()} pt',
+          onChanged: (value) {
+            setState(() {
+              _bibleTextSize = value;
+            });
+          },
+          onChangeEnd: widget.onBibleTextSizeChanged,
+        ),
+        const SizedBox(height: 16),
+        SwitchListTile(
+          key: const Key('show_verses_inline_switch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Compact verse spacing'),
+          subtitle: const Text('Fit more text on screen while reading'),
+          value: _showVersesInline,
+          onChanged: (value) {
+            setState(() {
+              _showVersesInline = value;
+            });
+            widget.onShowVersesInlineChanged(value);
+          },
+        ),
+        const SizedBox(height: 24),
+        _buildColorPresetControls(context),
+        const SizedBox(height: 24),
+        Text('Preview', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: _editingBackgroundColor,
+            border: Border.all(color: Theme.of(context).dividerColor),
+            borderRadius: BorderRadius.circular(8),
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Text size'),
-              Text('${_bibleTextSize.round()} pt'),
-            ],
-          ),
-          Slider(
-            key: const Key('bible_text_size_slider'),
-            value: _bibleTextSize,
-            min: 12,
-            max: 28,
-            divisions: 16,
-            label: '${_bibleTextSize.round()} pt',
-            onChanged: (value) {
-              setState(() {
-                _bibleTextSize = value;
-              });
-              widget.onBibleTextSizeChanged(value);
-            },
-          ),
-          const SizedBox(height: 16),
-          SwitchListTile(
-            key: const Key('show_verses_inline_switch'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Continuous verses'),
-            subtitle: const Text('Show verses one after another'),
-            value: _showVersesInline,
-            onChanged: (value) {
-              setState(() {
-                _showVersesInline = value;
-              });
-              widget.onShowVersesInlineChanged(value);
-            },
-          ),
-          const SizedBox(height: 24),
-          _buildColorPresetControls(context),
-          const SizedBox(height: 24),
-          Text('Preview', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: _editingBackgroundColor,
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: RichText(
-                text: TextSpan(
-                  style: TextStyle(
-                    color: _editingTextColor,
-                    fontSize: _bibleTextSize,
-                    height: 1.45,
-                  ),
-                  children: _previewTextSpans(context),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  color: _editingTextColor,
+                  fontSize: _bibleTextSize,
+                  height: 1.45,
                 ),
+                children: _previewTextSpans(context),
               ),
             ),
           ),
-        ],
+        ),
+      ]),
+    );
+  }
+
+  Widget _settingsPane(List<Widget> children) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
       ),
     );
   }
@@ -349,6 +422,11 @@ class _SettingsPageState extends State<SettingsPage> {
           },
         ),
         const SizedBox(height: 12),
+        _ContrastStatus(
+          backgroundColor: _editingBackgroundColor,
+          textColor: _editingTextColor,
+        ),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.icon(
@@ -377,6 +455,25 @@ class _SettingsPageState extends State<SettingsPage> {
       _editingTextColor = fallbackPreset.textColor;
     });
     widget.onCustomColorPresetDeleted(deletedPreset);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Deleted “${deletedPreset.name}”'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () {
+              setState(() {
+                _colorPresets = [..._colorPresets, deletedPreset];
+                _selectedColorPreset = deletedPreset;
+                _editingBackgroundColor = deletedPreset.backgroundColor;
+                _editingTextColor = deletedPreset.textColor;
+              });
+              widget.onCustomColorPresetSaved(deletedPreset);
+            },
+          ),
+        ),
+      );
   }
 
   Widget _buildColorEditor(
@@ -456,6 +553,9 @@ class _SettingsPageState extends State<SettingsPage> {
       _selectedColorPreset = preset;
     });
     widget.onCustomColorPresetSaved(preset);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Saved “${preset.name}”')));
   }
 
   String _formatColor(Color color) {
@@ -504,59 +604,60 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildAboutSettings(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.menu_book,
-                size: 48,
-                color: Theme.of(context).colorScheme.primary,
+      child: _settingsPane([
+        Row(
+          children: [
+            Icon(
+              Icons.menu_book,
+              size: 48,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: FutureBuilder<PackageInfo>(
+                future: _packageInfo,
+                builder: (context, snapshot) {
+                  final versionText = snapshot.hasData
+                      ? 'Version ${_formatVersion(snapshot.data!)}'
+                      : 'Version loading...';
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _kAppName,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        versionText,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: FutureBuilder<PackageInfo>(
-                  future: _packageInfo,
-                  builder: (context, snapshot) {
-                    final versionText = snapshot.hasData
-                        ? 'Version ${_formatVersion(snapshot.data!)}'
-                        : 'Version loading...';
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _kAppName,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          versionText,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          _buildAboutRow(context, 'Made by', _kAppMaker),
-          _buildAboutRow(context, 'License', _kAppLicense),
-          _buildAboutRow(
-            context,
-            'Bible data',
-            'Bundled Bible JSON files from the BibleIO project',
-          ),
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.description_outlined),
-            label: const Text('Read License'),
-            onPressed: () => _showLicenseFile(context),
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+        _buildAboutRow(context, 'Made by', _kAppMaker),
+        _buildAboutRow(context, 'License', _kAppLicense),
+        _buildAboutRow(
+          context,
+          'Bible data',
+          'Bundled Bible JSON files from the BibleIO project',
+        ),
+        if (widget.bible?.copyright case final copyright?)
+          _buildAboutRow(context, 'Translation copyright', copyright),
+        if (widget.bible?.license case final license?)
+          _buildAboutRow(context, 'Translation license', license),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.description_outlined),
+          label: const Text('Read License'),
+          onPressed: () => _showLicenseFile(context),
+        ),
+      ]),
     );
   }
 
@@ -806,10 +907,18 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                 runSpacing: 8,
                 children: [
                   for (final quickColor in _quickColors)
-                    InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () => _setColor(quickColor),
-                      child: _ColorSwatch(color: quickColor),
+                    Semantics(
+                      button: true,
+                      selected: quickColor.toARGB32() == color.toARGB32(),
+                      label: 'Use ${_formatColor(quickColor)}',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _setColor(quickColor),
+                        child: SizedBox.square(
+                          dimension: 48,
+                          child: Center(child: _ColorSwatch(color: quickColor)),
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -860,13 +969,24 @@ class _SaturationValuePicker extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        return GestureDetector(
-          onTapDown: (details) => _handlePosition(details.localPosition, size),
-          onPanUpdate: (details) =>
-              _handlePosition(details.localPosition, size),
-          child: CustomPaint(
-            painter: _SaturationValuePainter(color),
-            size: size,
+        return Semantics(
+          label: 'Saturation and brightness',
+          value:
+              '${(color.saturation * 100).round()}% saturation, '
+              '${(color.value * 100).round()}% brightness',
+          onIncrease: () =>
+              onChanged(color.withValue((color.value + 0.05).clamp(0.0, 1.0))),
+          onDecrease: () =>
+              onChanged(color.withValue((color.value - 0.05).clamp(0.0, 1.0))),
+          child: GestureDetector(
+            onTapDown: (details) =>
+                _handlePosition(details.localPosition, size),
+            onPanUpdate: (details) =>
+                _handlePosition(details.localPosition, size),
+            child: CustomPaint(
+              painter: _SaturationValuePainter(color),
+              size: size,
+            ),
           ),
         );
       },
@@ -936,24 +1056,90 @@ class _ColorSwatchPair extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 56,
-      height: 36,
+    return ExcludeSemantics(
+      child: SizedBox(
+        width: 56,
+        height: 36,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: preset.backgroundColor,
+            border: Border.all(color: Theme.of(context).dividerColor),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Center(
+            child: Text(
+              'Aa',
+              style: TextStyle(
+                color: preset.textColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ContrastStatus extends StatelessWidget {
+  const _ContrastStatus({
+    required this.backgroundColor,
+    required this.textColor,
+  });
+
+  final Color backgroundColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundLuminance = backgroundColor.computeLuminance();
+    final textLuminance = textColor.computeLuminance();
+    final lighter = backgroundLuminance > textLuminance
+        ? backgroundLuminance
+        : textLuminance;
+    final darker = backgroundLuminance > textLuminance
+        ? textLuminance
+        : backgroundLuminance;
+    final ratio = (lighter + 0.05) / (darker + 0.05);
+    final passes = ratio >= 4.5;
+    final colors = Theme.of(context).colorScheme;
+
+    return Semantics(
+      label:
+          'Text contrast ${ratio.toStringAsFixed(1)} to 1. '
+          '${passes ? 'Passes' : 'Does not pass'} accessible text contrast.',
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: preset.backgroundColor,
-          border: Border.all(color: Theme.of(context).dividerColor),
-          borderRadius: BorderRadius.circular(6),
+          color: passes ? colors.primaryContainer : colors.errorContainer,
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Center(
-          child: Text(
-            'Aa',
-            style: TextStyle(
-              color: preset.textColor,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              height: 1,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                passes
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.warning_amber_rounded,
+                color: passes
+                    ? colors.onPrimaryContainer
+                    : colors.onErrorContainer,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Contrast ${ratio.toStringAsFixed(1)}:1 · '
+                  '${passes ? 'comfortable for body text' : 'increase the contrast for easier reading'}',
+                  style: TextStyle(
+                    color: passes
+                        ? colors.onPrimaryContainer
+                        : colors.onErrorContainer,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

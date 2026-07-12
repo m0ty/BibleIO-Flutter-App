@@ -1,77 +1,89 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:bible_io/bible_io.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-const _bookAbbreviationAliases = {
-  'jz': 'jud',
-  '1rs': '1kgs',
-  '2rs': '2kgs',
-  '1cr': '1ch',
-  '2cr': '2ch',
-  'ag': 'hg',
-  'ap': 're',
-  'atos': 'act',
-  'ct': 'so',
-  'ed': 'ezr',
-  'ef': 'eph',
-  'fm': 'phm',
-  'fp': 'ph',
-  'hc': 'hk',
-  'jÃ³': 'job',
-  'jô': 'job',
-  'j�': 'job',
-  'lc': 'lk',
-  'mc': 'mk',
-  'mq': 'mi',
-  'os': 'ho',
-  'pv': 'prv',
-  'sf': 'zp',
-  'sl': 'ps',
-  'tg': 'jm',
+const bibleCatalogAssetPath = 'bible_io_json/bible_list.json';
+
+// These legacy source files intentionally contain empty chapters. Bible IO
+// 1.1 rejects skeletal content under its strict default validation policy:
+//
+// * zho-ncv-trad-shen: Song of Solomon 1-8
+// * kor-krv-1938: Job 42 and 1 Peter 5
+//
+// Keep the compatibility exception path-specific so malformed or incomplete
+// content added later still fails strict validation instead of being hidden.
+const _partialBibleAssetPaths = {
+  'bible_io_json/Chinese/zho-ncv-trad-shen.json',
+  'bible_io_json/Korean/kor-krv-1938.json',
 };
 
-/// Loads bundled Bible JSON assets with Flutter's UTF-8 asset decoding.
-Future<Bible> loadBibleAsset(String assetPath) async {
-  final jsonString = await _loadUtf8String(assetPath);
-  final normalizedJson = _normalizeBibleJson(jsonString);
-  return Bible.fromJson(normalizedJson);
+const _strictLoadOptions = BibleLoadOptions(
+  searchIndexMode: SearchIndexMode.lazy,
+  parseInBackground: true,
+);
+
+const _partialLoadOptions = BibleLoadOptions(
+  validation: BibleDataValidationOptions.permissive,
+  searchIndexMode: SearchIndexMode.lazy,
+  parseInBackground: true,
+);
+
+Future<BibleCatalog>? _catalogFuture;
+
+/// Whether [assetPath] is a known, intentionally incomplete bundled edition.
+bool isPartialBibleAsset(String assetPath) {
+  return _partialBibleAssetPaths.contains(_normalizeAssetPath(assetPath));
 }
 
-Future<String> _loadUtf8String(String assetPath) async {
-  try {
-    return await rootBundle.loadString(assetPath);
-  } on FlutterError {
-    if (kIsWeb) {
-      rethrow;
-    }
-    return File(assetPath).readAsString();
-  }
+/// Loads the bundled translation catalog using Bible IO's validated API.
+///
+/// The catalog is cached because it is immutable and shared by every edition
+/// load during the lifetime of the application.
+Future<BibleCatalog> loadBibleCatalog() {
+  return _catalogFuture ??= BibleCatalog.loadAsset(
+    rootBundle,
+    bibleCatalogAssetPath,
+  );
 }
 
-String _normalizeBibleJson(String jsonString) {
-  final data = json.decode(jsonString) as Map<String, dynamic>;
-  final books = data['books'] as Map<String, dynamic>?;
-  if (books == null) {
-    return jsonString;
-  }
-
-  var changed = false;
-  final normalizedBooks = <String, dynamic>{};
-  for (final entry in books.entries) {
-    final normalizedKey = _bookAbbreviationAliases[entry.key] ?? entry.key;
-    normalizedBooks[normalizedKey] = entry.value;
-    if (normalizedKey != entry.key) {
-      changed = true;
+/// Finds the catalog source whose asset path matches [assetPath].
+BibleSource? bibleSourceForAsset(BibleCatalog catalog, String assetPath) {
+  final normalizedPath = _normalizeAssetPath(assetPath);
+  for (final source in catalog.sources) {
+    if (_normalizeAssetPath(source.assetPath) == normalizedPath) {
+      return source;
     }
   }
+  return null;
+}
 
-  if (!changed) {
-    return jsonString;
+/// Loads a bundled Bible without blocking the UI where isolates are available.
+///
+/// Search indexes are lazy so the reader can appear before search data is
+/// retained. Call [Bible.prewarmSearchIndexAsync] after the first reader frame
+/// when search should be ready before the user opens it.
+Future<Bible> loadBibleAsset(
+  String assetPath, {
+  BibleSource? source,
+  BibleLoadProgressCallback? onLoadProgress,
+}) async {
+  final resolvedSource =
+      source ?? bibleSourceForAsset(await loadBibleCatalog(), assetPath);
+
+  return Bible.loadAsset(
+    rootBundle,
+    assetPath,
+    source: resolvedSource,
+    options: isPartialBibleAsset(assetPath)
+        ? _partialLoadOptions
+        : _strictLoadOptions,
+    onLoadProgress: onLoadProgress,
+  );
+}
+
+String _normalizeAssetPath(String assetPath) {
+  var normalized = assetPath.trim().replaceAll('\\', '/');
+  while (normalized.startsWith('./')) {
+    normalized = normalized.substring(2);
   }
-
-  data['books'] = normalizedBooks;
-  return json.encode(data);
+  return normalized;
 }

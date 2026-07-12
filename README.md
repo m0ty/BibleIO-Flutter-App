@@ -1,41 +1,32 @@
-# BibleIO Flutter App
+# BibleIO Reader
 
-A Flutter Bible reader app that loads multiple Bible translations from local JSON assets and provides search, navigation, and settings support.
+BibleIO Reader is an offline, multilingual Flutter Bible app powered by the
+[`bible_io`](https://pub.dev/packages/bible_io) package. It combines a focused
+reading experience with fast passage navigation, advanced search, responsive
+layouts, and locally bundled translations.
 
 ## Features
 
-- Browse supported Bible translations by language
-- View books, chapters, and verses
-- Search text across loaded translations
-- Persist user settings with `shared_preferences`
-- Local JSON asset support for offline usage
+- Read 19 bundled Bible editions across 14 languages without a network connection
+- Browse translations by language and retain a separate reading position for each edition
+- Jump to multilingual references and passage ranges such as `John 3:16` or `Romans 8:1-4`
+- Search with phrase, all-word, or any-word matching, filters, highlighting, and pagination
+- Load and prepare large translations in the background with progress feedback
+- Use responsive compact and wide layouts with right-to-left scripture support
+- Customize text size, verse spacing, and reusable reading color presets
+- Select and copy scripture text
 
 ## Supported Languages
 
-The app includes Bible data for these languages:
-
-- Arabic
-- Chinese
-- English
-- Esperanto
-- Finnish
-- French
-- German
-- Greek
-- Korean
-- Portuguese
-- Romanian
-- Russian
-- Spanish
-- Vietnamese
+Arabic, Chinese, English, Esperanto, Finnish, French, German, Greek, Korean,
+Portuguese, Romanian, Russian, Spanish, and Vietnamese.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Flutter SDK installed
-- A compatible editor such as Visual Studio Code or Android Studio
-- Target platform setup for Android, iOS, Windows, Linux, or macOS
+- Flutter SDK
+- Platform tooling for the targets you plan to build
 
 ### Install dependencies
 
@@ -49,31 +40,39 @@ flutter pub get
 flutter run
 ```
 
-To target a specific platform, use a device ID or Flutter desktop configuration:
+To choose a target explicitly:
 
 ```bash
 flutter run -d windows
 flutter run -d chrome
 ```
 
+### Verify changes
+
+```bash
+flutter analyze
+flutter test
+```
+
 ## Project Structure
 
-- `lib/main.dart` – app entry point
-- `lib/pages/` – UI pages for home, chapters, search, verses, and settings
-- `lib/services/bible_loader.dart` – Bible asset loading service
-- `bible_io_json/` – local Bible translation JSON assets
+- `lib/main.dart` - application entry point, theme, and color-preset persistence
+- `lib/pages/bible_home_page.dart` - responsive reader and Bible navigation
+- `lib/pages/search_page.dart` - paginated, highlighted scripture search
+- `lib/pages/settings_page.dart` - translation, display, theme, and app settings
+- `lib/services/bible_loader.dart` - catalog lookup and background Bible loading
+- `lib/models/` - reader-specific value types
+- `bible_io_json/` - bundled translation catalog and Bible content
+- `test/` - loader, reader, settings, and search coverage
 
-## Dependencies
+## Bible Data and Licensing
 
-- `flutter`
-- `cupertino_icons`
-- `bible_io`
-- `shared_preferences`
-
-## Asset Configuration
-
-Bible JSON assets are declared in `pubspec.yaml` under `flutter.assets` and loaded locally by the app.
+The application source is licensed under the GNU Affero General Public License
+v3.0 or later. Bible translations are independent works and retain their own
+copyright and licensing terms. See [LICENSE](LICENSE) and the metadata for each
+bundled edition.
 
 ## Notes
 
-This repository is configured as a private Flutter app and is not intended for publishing to `pub.dev`.
+This repository is configured as a private Flutter application and is not
+intended for publication as a Dart package.

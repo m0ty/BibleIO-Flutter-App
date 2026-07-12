@@ -1,12 +1,11 @@
 {
-    "name": "flutter_bible",
-    "short_name": "flutter_bible",
+    "name": "BibleIO Reader",
+    "short_name": "BibleIO",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#F7F8F6",
+    "theme_color": "#355F78",
+    "description": "An offline, multilingual Bible reader powered by Bible IO.",
     "prefer_related_applications": false,
     "icons": [
         {

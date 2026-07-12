@@ -10,12 +10,21 @@ const _kThemeModePrefKey = 'theme_mode';
 const _kSelectedBibleColorPresetIdPrefKey = 'selected_bible_color_preset_id';
 const _kCustomBibleColorPresetsPrefKey = 'custom_bible_color_presets';
 
-void main() {
-  runApp(const BibleReaderApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences? preferences;
+  try {
+    preferences = await SharedPreferences.getInstance();
+  } on Object {
+    // The app can still start with defaults if preference storage is unavailable.
+  }
+  runApp(BibleReaderApp(initialPreferences: preferences));
 }
 
 class BibleReaderApp extends StatefulWidget {
-  const BibleReaderApp({super.key});
+  const BibleReaderApp({super.key, this.initialPreferences});
+
+  final SharedPreferences? initialPreferences;
 
   @override
   State<BibleReaderApp> createState() => _BibleReaderAppState();
@@ -33,7 +42,14 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
   }
 
   Future<void> _loadColorPresetSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    late final SharedPreferences prefs;
+    try {
+      prefs =
+          widget.initialPreferences ?? await SharedPreferences.getInstance();
+    } on Object {
+      if (mounted) setState(() => _initialized = true);
+      return;
+    }
     final customPresets = _decodeCustomColorPresets(
       prefs.getString(_kCustomBibleColorPresetsPrefKey),
     );
@@ -45,6 +61,9 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
       (preset) => preset.id == selectedId,
       orElse: () => builtInBibleColorPresets.first,
     );
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _customColorPresets = customPresets;
       _selectedColorPreset = selectedPreset;
@@ -127,15 +146,19 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
   @override
   Widget build(BuildContext context) {
     if (!_initialized) {
-      return const MaterialApp(
-        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      return MaterialApp(
+        title: 'BibleIO Reader',
+        debugShowCheckedModeBanner: false,
+        theme: _buildAppTheme(builtInBibleColorPresets.first),
+        home: const _AppStartupView(),
       );
     }
 
     final theme = _buildAppTheme(_selectedColorPreset);
 
     return MaterialApp(
-      title: 'BibleIO Viewer',
+      title: 'BibleIO Reader',
+      debugShowCheckedModeBanner: false,
       theme: theme,
       home: BibleHomePage(
         colorPresets: [...builtInBibleColorPresets, ..._customColorPresets],
@@ -149,16 +172,88 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
 
   ThemeData _buildAppTheme(BibleColorPreset colorPreset) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: colorPreset.verseNumberColor,
+      seedColor: const Color(0xFF355F78),
       brightness: colorPreset.brightness,
     );
     return ThemeData(
       colorScheme: colorScheme,
       useMaterial3: true,
+      visualDensity: VisualDensity.standard,
+      scaffoldBackgroundColor: colorScheme.surface,
       appBarTheme: AppBarTheme(
-        backgroundColor: colorScheme.primary,
-        foregroundColor: colorScheme.onPrimary,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0,
+        scrolledUnderElevation: 1,
+        centerTitle: false,
+        surfaceTintColor: colorScheme.surfaceTint,
+        titleTextStyle: TextStyle(
+          color: colorScheme.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerLowest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+      ),
+      navigationDrawerTheme: NavigationDrawerThemeData(
+        backgroundColor: colorScheme.surfaceContainerLow,
+        indicatorColor: colorScheme.secondaryContainer,
+      ),
+      dividerTheme: DividerThemeData(
+        color: colorScheme.outlineVariant,
+        thickness: 1,
+        space: 1,
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: colorScheme.primary,
+        selectionColor: colorScheme.primary.withValues(alpha: 0.24),
+        selectionHandleColor: colorScheme.primary,
+      ),
+    );
+  }
+}
+
+class _AppStartupView extends StatelessWidget {
+  const _AppStartupView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Semantics(
+          label: 'Starting BibleIO Reader',
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_stories_rounded, size: 52),
+              SizedBox(height: 20),
+              SizedBox(width: 180, child: LinearProgressIndicator()),
+            ],
+          ),
+        ),
       ),
     );
   }
