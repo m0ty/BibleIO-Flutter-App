@@ -1,95 +1,198 @@
-name: Build and Release
+name: Build and release
 
 on:
   push:
     tags:
       - 'Release-*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-desktop:
-    runs-on: ${{ matrix.os }}
+  prepare:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Read version from tag
+        id: release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^Release-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a tag in the form Release-x.x.x; received: $RELEASE_TAG" >&2
+            exit 1
+          fi
 
+          echo "version=${RELEASE_TAG#Release-}" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Analyze and test
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  build-desktop:
+    name: Build ${{ matrix.label }}
+    needs:
+      - prepare
+      - verify
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            build_os: linux
-            build_cmd: flutter build linux --release
-            artifact_path: build/linux/x64/release/bundle
-            artifact_name: BibleIO-Linux
+          - label: Windows x64
+            os: windows-latest
+            target: windows
+            architecture: x64
+            artifact: BibleIO-Windows-x64
 
-          - os: windows-latest
-            build_os: windows
-            build_cmd: flutter build windows --release
-            artifact_path: build/windows/x64/runner/Release
-            artifact_name: BibleIO-Windows
+          - label: Linux x64
+            os: ubuntu-latest
+            target: linux
+            architecture: x64
+            artifact: BibleIO-Linux-x64
 
-          - os: macos-latest
-            build_os: macos
-            build_cmd: flutter build macos --release
-            artifact_path: build/macos/Build/Products/Release
-            artifact_name: BibleIO-macOS
+          - label: macOS Apple Silicon
+            os: macos-latest
+            target: macos
+            architecture: arm64
+            artifact: BibleIO-macOS-arm64
+
+          - label: macOS Intel
+            os: macos-15-intel
+            target: macos
+            architecture: x64
+            artifact: BibleIO-macOS-x64
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Install Linux dependencies
-        if: matrix.build_os == 'linux'
+      - name: Install Linux build dependencies
+        if: matrix.target == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            libstdc++-12-dev
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          architecture: ${{ matrix.architecture }}
           cache: true
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build ${{ matrix.build_os }}
-        run: ${{ matrix.build_cmd }}
+      - name: Build
+        run: >-
+          flutter build ${{ matrix.target }} --release
+          --build-name=${{ needs.prepare.outputs.version }}
+          --build-number=${{ github.run_number }}
 
-      - name: Create artifact directory
-        shell: bash
-        run: mkdir -p "$GITHUB_WORKSPACE/release_artifacts"
-
-      - name: Zip ${{ matrix.build_os }} build
-        shell: bash
+      - name: Package Windows portable build
+        if: matrix.target == 'windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          if [ -d "${{ matrix.artifact_path }}" ]; then
-            cd "${{ matrix.artifact_path }}"
+          $releaseDirectory = 'build\windows\x64\runner\Release'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Redist.14.Latest -property installationPath
+          $crtDirectory = Get-ChildItem "$visualStudio\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory | Select-Object -Last 1
 
-            if [ "${{ matrix.build_os }}" = "windows" ]; then
-              7z a -r "$GITHUB_WORKSPACE/release_artifacts/${{ matrix.artifact_name }}.zip" .
-            else
-              zip -r "$GITHUB_WORKSPACE/release_artifacts/${{ matrix.artifact_name }}.zip" .
-            fi
-          else
-            echo "Artifact path not found: ${{ matrix.artifact_path }}"
+          if (-not $crtDirectory) {
+            throw 'Could not find the Visual C++ runtime DLLs.'
+          }
+
+          Copy-Item "$($crtDirectory.FullName)\msvcp140.dll" $releaseDirectory
+          Copy-Item "$($crtDirectory.FullName)\vcruntime140.dll" $releaseDirectory
+          Copy-Item "$($crtDirectory.FullName)\vcruntime140_1.dll" $releaseDirectory
+
+          New-Item -ItemType Directory -Path release_artifacts | Out-Null
+          Compress-Archive `
+            -Path "$releaseDirectory\*" `
+            -DestinationPath "release_artifacts\BibleIO-Windows-x64-$VERSION.zip"
+
+      - name: Package Linux bundle
+        if: matrix.target == 'linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p release_artifacts
+          tar \
+            -C build/linux/x64/release/bundle \
+            -czf "release_artifacts/BibleIO-Linux-x64-$VERSION.tar.gz" \
+            .
+
+      - name: Package macOS app
+        if: matrix.target == 'macos'
+        shell: bash
+        env:
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          app_path="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo 'Could not find the built macOS application.' >&2
             exit 1
           fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          mkdir -p release_artifacts
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$app_path" \
+            "release_artifacts/$ARTIFACT_NAME-$VERSION.zip"
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v5
         with:
-          name: ${{ matrix.artifact_name }}
-          path: release_artifacts/${{ matrix.artifact_name }}.zip
+          name: ${{ matrix.artifact }}-${{ needs.prepare.outputs.version }}
+          path: release_artifacts/*
+          if-no-files-found: error
 
   build-web:
+    name: Build web
+    needs:
+      - prepare
+      - verify
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -98,35 +201,45 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build web
-        run: flutter build web --release
+      - name: Build
+        run: >-
+          flutter build web --release
+          --build-name=${{ needs.prepare.outputs.version }}
+          --build-number=${{ github.run_number }}
 
-      - name: Zip web build
+      - name: Package web build
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir -p release_artifacts
           cd build/web
-          zip -r "$GITHUB_WORKSPACE/release_artifacts/BibleIO-Web.zip" .
+          zip -r "$GITHUB_WORKSPACE/release_artifacts/BibleIO-Web-$VERSION.zip" .
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v5
         with:
-          name: BibleIO-Web
-          path: release_artifacts/BibleIO-Web.zip
+          name: BibleIO-Web-${{ needs.prepare.outputs.version }}
+          path: release_artifacts/*
+          if-no-files-found: error
 
   build-android:
+    name: Build Android APK
+    needs:
+      - prepare
+      - verify
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Set up Java
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -136,48 +249,64 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release
+        run: >-
+          flutter build apk --release
+          --build-name=${{ needs.prepare.outputs.version }}
+          --build-number=${{ github.run_number }}
 
-      - name: Create artifact directory
-        run: mkdir -p release_artifacts
+      - name: Package APK
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p release_artifacts
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "release_artifacts/BibleIO-Android-$VERSION.apk"
 
-      - name: Copy APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk release_artifacts/BibleIO-Android.apk
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v5
         with:
-          name: BibleIO-Android
-          path: release_artifacts/BibleIO-Android.apk
+          name: BibleIO-Android-${{ needs.prepare.outputs.version }}
+          path: release_artifacts/*
+          if-no-files-found: error
 
   create-release:
+    name: Publish GitHub release
     needs:
+      - prepare
       - build-desktop
       - build-web
       - build-android
-
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Download release artifacts
+        uses: actions/download-artifact@v5
         with:
-          path: all_artifacts
+          path: release_artifacts
+          merge-multiple: true
 
-      - name: Show downloaded artifacts
-        run: find all_artifacts -type f
+      - name: Create checksums
+        working-directory: release_artifacts
+        shell: bash
+        run: sha256sum BibleIO-* > SHA256SUMS.txt
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            all_artifacts/**/*.zip
-            all_artifacts/**/*.apk
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+      - name: Create or update GitHub release
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mapfile -t files < <(find release_artifacts -maxdepth 1 -type f -print | sort)
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              --verify-tag \
+              --title "BibleIO $VERSION" \
+              --generate-notes
+          fi

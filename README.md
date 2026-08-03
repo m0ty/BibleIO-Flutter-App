@@ -54,6 +54,28 @@ flutter analyze
 flutter test
 ```
 
+## Creating a Release
+
+Pushing a semantic version tag in the form `Release-x.x.x` starts the GitHub
+Actions release workflow. For example:
+
+```bash
+git tag Release-1.2.3
+git push origin Release-1.2.3
+```
+
+After analysis and tests pass, GitHub builds and publishes versioned artifacts
+for Windows x64, Linux x64, macOS Intel, macOS Apple Silicon, Android, and web.
+The release also includes a `SHA256SUMS.txt` file. Windows and Linux releases
+contain their complete runtime bundles; their executable files cannot be
+distributed by themselves.
+
+The macOS artifacts are not Developer ID signed or notarized. Android currently
+uses the debug signing key configured for the release build. Configure platform
+signing before distributing either build through an app store. iOS is not built
+because an installable iOS release requires Apple signing credentials and a
+provisioning profile.
+
 ## Project Structure
 
 - `lib/main.dart` - application entry point, theme, and color-preset persistence
