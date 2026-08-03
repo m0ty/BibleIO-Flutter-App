@@ -141,18 +141,10 @@ app.*.map.json
 **/windows/**/*.pdb
 **/windows/**/*.exp
 
-**/windows/**/GeneratedPluginRegistrant.h
-**/windows/**/GeneratedPluginRegistrant.cc
-
-**/windows/**/flutter/
 **/windows/**/flutter/ephemeral/
 
 # Linux related
-**/linux/**/flutter/
 **/linux/**/flutter/ephemeral/
-
-**/linux/**/GeneratedPluginRegistrant.h
-**/linux/**/GeneratedPluginRegistrant.cc
 
 # Keep plugin symlink binaries
 !**/linux/**/flutter/ephemeral/.plugin_symlinks/**/linux/**/*.so
