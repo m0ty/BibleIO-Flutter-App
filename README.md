@@ -47,6 +47,47 @@ flutter run -d windows
 flutter run -d chrome
 ```
 
+### Run the web app locally
+
+First, confirm that Flutter can see a supported browser:
+
+```bash
+flutter devices
+```
+
+Then start the development version in Chrome or Edge:
+
+```bash
+flutter run -d chrome
+# Windows alternative:
+flutter run -d edge
+```
+
+Flutter opens the app in the selected browser and enables hot reload while the
+command is running. If you do not want Flutter to launch a browser, use its web
+server device and open the URL printed in the terminal:
+
+```bash
+flutter run -d web-server --web-port 8080
+```
+
+To test the same optimized output included in a GitHub release, build and serve
+it through a local HTTP server:
+
+```bash
+flutter build web --release
+
+# Windows (Python launcher)
+py -m http.server 8080 --directory build\web
+
+# macOS or Linux
+python3 -m http.server 8080 --directory build/web
+```
+
+Open <http://localhost:8080> after starting the server. Do not double-click
+`build/web/index.html`; Flutter web builds need to be served over HTTP and may
+show a blank page when opened directly with a `file://` URL.
+
 ### Verify changes
 
 ```bash

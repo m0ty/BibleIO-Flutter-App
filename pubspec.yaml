@@ -62,6 +62,7 @@ flutter:
 
   assets:
     - LICENSE
+    - assets/app_icon.png
     - bible_io_json/bible_list.json
     - bible_io_json/Arabic/
     - bible_io_json/Chinese/
