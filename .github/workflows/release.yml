@@ -181,7 +181,7 @@ jobs:
             "release_artifacts/$ARTIFACT_NAME-$VERSION.zip"
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}-${{ needs.prepare.outputs.version }}
           path: release_artifacts/*
@@ -223,7 +223,7 @@ jobs:
           zip -r "$GITHUB_WORKSPACE/release_artifacts/BibleIO-Web-$VERSION.zip" .
 
       - name: Upload web artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: BibleIO-Web-${{ needs.prepare.outputs.version }}
           path: release_artifacts/*
@@ -271,7 +271,7 @@ jobs:
             "release_artifacts/BibleIO-Android-$VERSION.apk"
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: BibleIO-Android-${{ needs.prepare.outputs.version }}
           path: release_artifacts/*
@@ -289,7 +289,7 @@ jobs:
       contents: write
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: release_artifacts
           merge-multiple: true
