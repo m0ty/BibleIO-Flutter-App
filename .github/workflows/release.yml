@@ -12,6 +12,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  FLUTTER_VERSION: '3.41.6'
+
 jobs:
   prepare:
     name: Validate release tag
@@ -44,6 +47,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Get dependencies
@@ -53,7 +57,7 @@ jobs:
         run: flutter analyze
 
       - name: Test
-        run: flutter test
+        run: flutter test --concurrency=1 --reporter expanded
 
   build-desktop:
     name: Build ${{ matrix.label }}
@@ -109,6 +113,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           architecture: ${{ matrix.architecture }}
           cache: true
 
@@ -196,6 +201,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Get dependencies
@@ -243,6 +249,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Get dependencies

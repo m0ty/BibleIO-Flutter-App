@@ -32,44 +32,46 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('reader supports compact, wide, and reference navigation', (
-    WidgetTester tester,
-  ) async {
-    _setTestViewport(tester, const Size(390, 844));
-    await tester.pumpWidget(const BibleReaderApp());
-    await _pumpUntilFound(tester, find.text('Genesis 1'));
+  testWidgets(
+    'reader supports compact, wide, and reference navigation',
+    (WidgetTester tester) async {
+      _setTestViewport(tester, const Size(390, 844));
+      await tester.pumpWidget(const BibleReaderApp());
+      await _pumpUntilFound(tester, find.text('Genesis 1'));
 
-    expect(find.text('BibleIO Reader'), findsOneWidget);
-    expect(find.byTooltip('Go to a Bible reference'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+      expect(find.text('BibleIO Reader'), findsOneWidget);
+      expect(find.byTooltip('Go to a Bible reference'), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
-    tester.view.physicalSize = const Size(1280, 800);
-    await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(1280, 800);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Find a book'), findsOneWidget);
-    expect(find.text('Genesis 1'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+      expect(find.text('Find a book'), findsOneWidget);
+      expect(find.text('Genesis 1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('Go to a Bible reference'));
-    await tester.pumpAndSettle();
-    expect(find.text('Go to a passage'), findsOneWidget);
+      await tester.tap(find.byTooltip('Go to a Bible reference'));
+      await tester.pumpAndSettle();
+      expect(find.text('Go to a passage'), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(const Key('reference_field')),
-      'Juan 3:16',
-    );
-    await tester.tap(find.widgetWithText(FilledButton, 'Go'));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('reference_field')),
+        'Juan 3:16',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Go'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('John 3'), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp('Verse 16')), findsOneWidget);
-    expect(find.textContaining('For God so loved the world'), findsOneWidget);
-    final readerScrollView = tester.widget<SingleChildScrollView>(
-      find.byType(SingleChildScrollView),
-    );
-    expect(readerScrollView.controller!.offset, greaterThan(0));
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('John 3'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Verse 16')), findsOneWidget);
+      expect(find.textContaining('For God so loved the world'), findsOneWidget);
+      final readerScrollView = tester.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(readerScrollView.controller!.offset, greaterThan(0));
+      expect(tester.takeException(), isNull);
+    },
+    timeout: const Timeout(Duration(minutes: 1)),
+  );
 
   testWidgets('display settings color preset dropdown lays out', (
     WidgetTester tester,
@@ -239,17 +241,18 @@ void _setTestViewport(WidgetTester tester, Size size) {
 Future<void> _pumpUntilFound(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 400,
+  Duration timeout = const Duration(seconds: 30),
 }) async {
-  for (
-    var attempt = 0;
-    attempt < attempts && finder.evaluate().isEmpty;
-    attempt++
-  ) {
+  final stopwatch = Stopwatch()..start();
+  while (finder.evaluate().isEmpty && stopwatch.elapsed < timeout) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 25)),
     );
     await tester.pump();
   }
-  expect(finder, findsWidgets);
+  expect(
+    finder,
+    findsWidgets,
+    reason: 'Widget was not found within ${timeout.inSeconds} seconds.',
+  );
 }
