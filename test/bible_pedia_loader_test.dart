@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:bible_io/bible_io.dart';
+import 'package:bible_pedia_dart/bible_pedia.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bible/services/bible_pedia_loader.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +22,46 @@ void main() {
     expect(bundle.contentVersion, 'test-1');
     expect(bundle.entries, isEmpty);
   });
+
+  test(
+    'bundled runtime asset contains the reviewed package snapshot',
+    () async {
+      final bundle = await loadBiblePediaBundle();
+
+      expect(bundle.datasetId, 'bible-pedia');
+      expect(bundle.languageCode, 'en');
+      expect(bundle.contentVersion, '1.0.0');
+      expect(bundle.length, 328);
+      expect(bundle.categories.map((category) => category.label), [
+        'People',
+        'Locations',
+        'Events',
+        'Concepts',
+        'Other',
+      ]);
+      expect(bundle.encyclopedia.categoryCounts, {
+        'person': 197,
+        'location': 63,
+        'event': 8,
+        'concept': 60,
+      });
+      expect(
+        bundle.coverageStatus(BibleBookEnum.matthew, 1),
+        CoverageStatus.covered,
+      );
+      expect(
+        bundle.coverageStatus(BibleBookEnum.acts, 1),
+        CoverageStatus.notCovered,
+      );
+      expect(bundle.provenance.generatorVersion, '0.1.0');
+      expect(bundle.rights.license, 'AGPL-3.0-only');
+      expect(bundle.rights.attribution, 'Bible Pedia Dart contributors');
+      expect(
+        bundle.encyclopedia.entryById('concept/crucifiction')?.title,
+        'Crucifixion',
+      );
+    },
+  );
 
   test('does not cache loads from an injected asset bundle', () async {
     final assetBundle = _TestAssetBundle(_validBundleJson);

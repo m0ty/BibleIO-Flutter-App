@@ -36,9 +36,11 @@ packages:
   bible_pedia_dart:
     dependency: "direct main"
     description:
-      path: "../bible-io-pedia-dart"
-      relative: true
-    source: path
+      path: "."
+      ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
+      resolved-ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
+      url: "https://github.com/m0ty/bible-io-pedia-dart.git"
+    source: git
     version: "0.1.0"
   boolean_selector:
     dependency: transitive
@@ -72,6 +74,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  crypto:
+    dependency: transitive
+    description:
+      name: crypto
+      sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.7"
   cupertino_icons:
     dependency: "direct main"
     description:

@@ -142,13 +142,13 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
   }
 
   void _openCitation(BibleCitation citation) {
-    final location = _firstLocation(citation.passage);
-    if (location == null) {
+    if (citation.books.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This reference cannot be opened.')),
       );
       return;
     }
+    final location = BibleLocation.fromVerseRef(citation.firstReference);
 
     final navigator = Navigator.of(context);
     final pediaRoute = ModalRoute.of(context);
@@ -197,30 +197,37 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
               );
             }
             if (snapshot.hasError || !snapshot.hasData) {
+              final error = snapshot.error;
+              final canRetry =
+                  error is! EncyclopediaLoadException || error.isRetryable;
               return _PediaMessage(
                 key: const Key('bible_pedia_error'),
                 icon: Icons.error_outline_rounded,
                 title: 'Bible Pedia could not be opened',
-                message:
-                    'Check that the encyclopedia bundle is available, then try again.',
-                action: FilledButton.icon(
-                  key: const Key('bible_pedia_retry_button'),
-                  onPressed: _retryLoading,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Try again'),
-                ),
+                message: canRetry
+                    ? 'Check that the encyclopedia bundle is available, then try again.'
+                    : 'The bundled encyclopedia data is invalid or incompatible with this app.',
+                action: canRetry
+                    ? FilledButton.icon(
+                        key: const Key('bible_pedia_retry_button'),
+                        onPressed: _retryLoading,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Try again'),
+                      )
+                    : null,
               );
             }
 
-            final encyclopedia = snapshot.data!.encyclopedia;
+            final bundle = snapshot.data!;
+            final encyclopedia = bundle.encyclopedia;
             return TabBarView(
               children: [
                 _BrowsePediaTab(
-                  encyclopedia: encyclopedia,
+                  bundle: bundle,
                   onEntrySelected: (entry) => _openEntry(entry, encyclopedia),
                 ),
                 _ChapterPediaTab(
-                  encyclopedia: encyclopedia,
+                  bundle: bundle,
                   location: widget.currentLocation,
                   chapterLabel: widget.currentChapterLabel,
                   onEntrySelected: (entry) => _openEntry(entry, encyclopedia),
@@ -241,12 +248,9 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
 }
 
 class _BrowsePediaTab extends StatefulWidget {
-  const _BrowsePediaTab({
-    required this.encyclopedia,
-    required this.onEntrySelected,
-  });
+  const _BrowsePediaTab({required this.bundle, required this.onEntrySelected});
 
-  final BibleEncyclopedia encyclopedia;
+  final BibleEncyclopediaBundle bundle;
   final ValueChanged<EncyclopediaEntry> onEntrySelected;
 
   @override
@@ -255,7 +259,7 @@ class _BrowsePediaTab extends StatefulWidget {
 
 class _BrowsePediaTabState extends State<_BrowsePediaTab> {
   final TextEditingController _searchController = TextEditingController();
-  EntryType? _selectedType;
+  String? _selectedCategoryId;
   String _query = '';
 
   @override
@@ -266,18 +270,27 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
 
   @override
   Widget build(BuildContext context) {
-    final categoryCounts = <EntryType, int>{
-      for (final type in EntryType.values)
-        type: widget.encyclopedia.entriesOfType(type).length,
+    final encyclopedia = widget.bundle.encyclopedia;
+    final selectedCategoryId = _selectedCategoryId;
+    final hits = encyclopedia.searchHits(
+      EncyclopediaQuery(
+        text: _query,
+        categoryIds: selectedCategoryId == null
+            ? const []
+            : [selectedCategoryId],
+      ),
+    );
+    final entries = hits.map((hit) => hit.entry).toList(growable: false);
+    if (_query.trim().isEmpty) {
+      entries.sort(_compareEntries);
+    }
+    final snippetsById = <String, String>{
+      for (final hit in hits) hit.entry.id: hit.snippet,
     };
-    final entries =
-        widget.encyclopedia
-            .search(_query)
-            .where(
-              (entry) => _selectedType == null || entry.type == _selectedType,
-            )
-            .toList(growable: false)
-          ..sort(_compareEntries);
+    final categoryCounts = encyclopedia.categoryCounts;
+    final selectedCategory = selectedCategoryId == null
+        ? null
+        : widget.bundle.categoryById(selectedCategoryId);
     final hasResults = entries.isNotEmpty;
 
     return ListView.builder(
@@ -290,7 +303,10 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _BrowseHero(entryCount: widget.encyclopedia.length),
+                _BrowseHero(
+                  entryCount: encyclopedia.length,
+                  rights: widget.bundle.rights,
+                ),
                 const SizedBox(height: 18),
                 TextField(
                   key: const Key('bible_pedia_search_field'),
@@ -325,8 +341,10 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
                 const SizedBox(height: 12),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final visibleTypes = EntryType.values
-                        .where((type) => categoryCounts[type]! > 0)
+                    final visibleCategories = widget.bundle.categories
+                        .where(
+                          (category) => (categoryCounts[category.id] ?? 0) > 0,
+                        )
                         .toList(growable: false);
                     final columnCount = constraints.maxWidth >= 720
                         ? 4
@@ -341,17 +359,18 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
                       spacing: spacing,
                       runSpacing: spacing,
                       children: [
-                        for (final type in visibleTypes)
+                        for (final category in visibleCategories)
                           SizedBox(
                             width: cardWidth,
                             child: _CategoryCard(
-                              type: type,
-                              count: categoryCounts[type]!,
-                              selected: type == _selectedType,
+                              category: category,
+                              count: categoryCounts[category.id]!,
+                              selected: category.id == selectedCategoryId,
                               onTap: () => setState(() {
-                                _selectedType = _selectedType == type
+                                _selectedCategoryId =
+                                    selectedCategoryId == category.id
                                     ? null
-                                    : type;
+                                    : category.id;
                               }),
                             ),
                           ),
@@ -366,9 +385,7 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
                       child: Semantics(
                         header: true,
                         child: Text(
-                          _selectedType == null
-                              ? 'All entries'
-                              : _pluralCategoryLabel(_selectedType!),
+                          selectedCategory?.label ?? 'All entries',
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
@@ -381,11 +398,12 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    if (_selectedType != null) ...[
+                    if (selectedCategoryId != null) ...[
                       const SizedBox(width: 4),
                       IconButton(
                         tooltip: 'Show every section',
-                        onPressed: () => setState(() => _selectedType = null),
+                        onPressed: () =>
+                            setState(() => _selectedCategoryId = null),
                         icon: const Icon(Icons.filter_alt_off_outlined),
                       ),
                     ],
@@ -412,7 +430,9 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
         return _CenteredPediaContent(
           child: _PediaEntryCard(
             entry: entry,
-            supportingText: _entrySupportingText(entry),
+            supportingText: _query.trim().isEmpty
+                ? _entrySupportingText(entry)
+                : snippetsById[entry.id] ?? _entrySupportingText(entry),
             onTap: () => widget.onEntrySelected(entry),
           ),
         );
@@ -423,13 +443,13 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
 
 class _ChapterPediaTab extends StatelessWidget {
   const _ChapterPediaTab({
-    required this.encyclopedia,
+    required this.bundle,
     required this.location,
     required this.chapterLabel,
     required this.onEntrySelected,
   });
 
-  final BibleEncyclopedia encyclopedia;
+  final BibleEncyclopediaBundle bundle;
   final BibleLocation? location;
   final String? chapterLabel;
   final ValueChanged<EncyclopediaEntry> onEntrySelected;
@@ -447,14 +467,12 @@ class _ChapterPediaTab extends StatelessWidget {
       );
     }
 
-    final matches =
-        encyclopedia
-            .entriesForChapter(
-              book: currentLocation.book,
-              chapter: currentLocation.chapter,
-            )
-            .toList(growable: false)
-          ..sort((left, right) => _compareEntries(left.entry, right.entry));
+    final results = bundle.entriesForChapter(
+      book: currentLocation.book,
+      chapter: currentLocation.chapter,
+    );
+    final matches = results.matches.toList(growable: false)
+      ..sort((left, right) => _compareEntries(left.entry, right.entry));
     final label = chapterLabel?.trim().isNotEmpty == true
         ? chapterLabel!.trim()
         : currentLocation.reference;
@@ -471,20 +489,20 @@ class _ChapterPediaTab extends StatelessWidget {
               icon: Icons.auto_stories_rounded,
               eyebrow: 'CURRENT CHAPTER',
               title: label,
-              message: matches.isEmpty
-                  ? 'No encyclopedia entries are linked to this chapter yet.'
-                  : '${matches.length} related ${matches.length == 1 ? 'entry' : 'entries'}',
+              message: _chapterHeaderMessage(
+                matches.length,
+                results.coverageStatus,
+              ),
             ),
           );
         }
         if (matches.isEmpty) {
-          return const _CenteredPediaContent(
+          return _CenteredPediaContent(
             child: _InlineEmptyState(
-              key: Key('bible_pedia_chapter_empty'),
+              key: const Key('bible_pedia_chapter_empty'),
               icon: Icons.travel_explore_rounded,
-              title: 'Nothing linked yet',
-              message:
-                  'Bible Pedia currently covers references in Matthew, Mark, Luke, and John.',
+              title: _chapterEmptyTitle(results.coverageStatus),
+              message: _chapterEmptyMessage(results.coverageStatus),
             ),
           );
         }
@@ -520,10 +538,7 @@ class _RecentPediaTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = recentIds
-        .map(encyclopedia.entryById)
-        .whereType<EncyclopediaEntry>()
-        .toList(growable: false);
+    final entries = _resolveRecentEntries(encyclopedia, recentIds);
 
     return ListView.builder(
       key: const PageStorageKey('bible_pedia_recent_list'),
@@ -589,9 +604,10 @@ class _RecentPediaTab extends StatelessWidget {
 }
 
 class _BrowseHero extends StatelessWidget {
-  const _BrowseHero({required this.entryCount});
+  const _BrowseHero({required this.entryCount, required this.rights});
 
   final int entryCount;
+  final ContentRights rights;
 
   @override
   Widget build(BuildContext context) {
@@ -636,6 +652,17 @@ class _BrowseHero extends StatelessWidget {
                       color: colors.onPrimaryContainer,
                     ),
                   ),
+                  if (rights.license != 'NOASSERTION' ||
+                      rights.attribution != 'Attribution not supplied') ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '${rights.attribution} (${rights.license})',
+                      key: const Key('bible_pedia_content_rights'),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -648,13 +675,13 @@ class _BrowseHero extends StatelessWidget {
 
 class _CategoryCard extends StatelessWidget {
   const _CategoryCard({
-    required this.type,
+    required this.category,
     required this.count,
     required this.selected,
     required this.onTap,
   });
 
-  final EntryType type;
+  final CategoryDescriptor category;
   final int count;
   final bool selected;
   final VoidCallback onTap;
@@ -665,10 +692,10 @@ class _CategoryCard extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${_pluralCategoryLabel(type)}, $count entries',
+      label: '${category.label}, $count entries',
       excludeSemantics: true,
       child: Card(
-        key: ValueKey('bible_pedia_category_${type.name}'),
+        key: ValueKey('bible_pedia_category_${category.id}'),
         margin: EdgeInsets.zero,
         color: selected
             ? colors.secondaryContainer
@@ -684,7 +711,7 @@ class _CategoryCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      _categoryIcon(type),
+                      _categoryIcon(category.entryType),
                       color: selected
                           ? colors.onSecondaryContainer
                           : colors.primary,
@@ -701,7 +728,7 @@ class _CategoryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  _pluralCategoryLabel(type),
+                  category.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -958,8 +985,59 @@ List<String> _mergeRecent(Iterable<String> first, Iterable<String> second) {
   return List.unmodifiable(result);
 }
 
+List<EncyclopediaEntry> _resolveRecentEntries(
+  BibleEncyclopedia encyclopedia,
+  Iterable<String> ids,
+) {
+  final entries = <EncyclopediaEntry>[];
+  final canonicalIds = <String>{};
+  for (final id in ids) {
+    final entry = encyclopedia.entryById(id);
+    if (entry != null && canonicalIds.add(entry.id)) {
+      entries.add(entry);
+    }
+  }
+  return List.unmodifiable(entries);
+}
+
 int _compareEntries(EncyclopediaEntry left, EncyclopediaEntry right) =>
     left.title.toLowerCase().compareTo(right.title.toLowerCase());
+
+String _chapterHeaderMessage(int matchCount, CoverageStatus status) {
+  if (matchCount == 0) {
+    return switch (status) {
+      CoverageStatus.covered =>
+        'This chapter has been reviewed and has no linked entries.',
+      CoverageStatus.partiallyCovered =>
+        'Editorial coverage for this chapter is still in progress.',
+      CoverageStatus.notCovered =>
+        'Editorial review has not started for this chapter.',
+    };
+  }
+
+  final summary =
+      '$matchCount related ${matchCount == 1 ? 'entry' : 'entries'}';
+  return switch (status) {
+    CoverageStatus.covered => summary,
+    CoverageStatus.partiallyCovered => '$summary; coverage is in progress.',
+    CoverageStatus.notCovered => '$summary; editorial review is pending.',
+  };
+}
+
+String _chapterEmptyTitle(CoverageStatus status) => switch (status) {
+  CoverageStatus.covered => 'No linked entries',
+  CoverageStatus.partiallyCovered => 'Coverage in progress',
+  CoverageStatus.notCovered => 'Chapter not covered yet',
+};
+
+String _chapterEmptyMessage(CoverageStatus status) => switch (status) {
+  CoverageStatus.covered =>
+    'This reviewed chapter has no linked encyclopedia entries.',
+  CoverageStatus.partiallyCovered =>
+    'More entries may be added as this chapter is reviewed.',
+  CoverageStatus.notCovered =>
+    'This chapter has not been reviewed for Bible Pedia yet.',
+};
 
 String _entrySupportingText(EncyclopediaEntry entry) {
   final description = _plainText(entry.descriptionMarkdown);
@@ -1001,40 +1079,4 @@ String _singularCategoryLabel(EntryType type) => switch (type) {
   EntryType.event => 'Event',
   EntryType.concept => 'Concept',
   EntryType.other => 'Other',
-};
-
-String _pluralCategoryLabel(EntryType type) => switch (type) {
-  EntryType.person => 'People',
-  EntryType.location => 'Places',
-  EntryType.event => 'Events',
-  EntryType.concept => 'Concepts',
-  EntryType.other => 'Other',
-};
-
-BibleLocation? _firstLocation(Passage passage) => switch (passage) {
-  BookPassage(:final book) => BibleLocation(book: book, chapter: 1),
-  ChapterPassage(:final book, :final startChapter) => BibleLocation(
-    book: book,
-    chapter: startChapter,
-  ),
-  VersePassage(:final selections) =>
-    selections.isEmpty ? null : _locationForReference(selections.first),
-  PassageSequence(:final passages) => _firstLocationInSequence(passages),
-};
-
-BibleLocation? _firstLocationInSequence(Iterable<Passage> passages) {
-  for (final passage in passages) {
-    final location = _firstLocation(passage);
-    if (location != null) return location;
-  }
-  return null;
-}
-
-BibleLocation _locationForReference(Reference reference) => switch (reference) {
-  VerseRef(:final book, :final chapter, :final verse) => BibleLocation(
-    book: book,
-    chapter: chapter,
-    verse: verse,
-  ),
-  VerseRangeRef(:final start) => BibleLocation.fromVerseRef(start),
 };

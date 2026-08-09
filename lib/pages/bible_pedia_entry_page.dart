@@ -817,9 +817,7 @@ List<_BookReferenceGroup> _groupReferencesByBook(
 ) {
   final referencesByBook = <BibleBookEnum, List<BibleCitation>>{};
   for (final citation in references) {
-    final books = _booksForPassage(citation.passage).toList()
-      ..sort((left, right) => left.index.compareTo(right.index));
-    for (final book in books) {
+    for (final book in citation.books) {
       referencesByBook.putIfAbsent(book, () => []).add(citation);
     }
   }
@@ -833,39 +831,4 @@ List<_BookReferenceGroup> _groupReferencesByBook(
         references: List.unmodifiable(referencesByBook[book]!),
       ),
   ]);
-}
-
-Set<BibleBookEnum> _booksForPassage(Passage passage) {
-  final books = <BibleBookEnum>{};
-
-  void addReference(Reference reference) {
-    switch (reference) {
-      case VerseRef(:final book):
-        books.add(book);
-      case VerseRangeRef(:final start, :final end):
-        for (var index = start.book.index; index <= end.book.index; index++) {
-          books.add(BibleBookEnum.values[index]);
-        }
-    }
-  }
-
-  void addPassage(Passage nestedPassage) {
-    switch (nestedPassage) {
-      case BookPassage(:final book):
-        books.add(book);
-      case ChapterPassage(:final book):
-        books.add(book);
-      case VersePassage(:final selections):
-        for (final reference in selections) {
-          addReference(reference);
-        }
-      case PassageSequence(:final passages):
-        for (final passage in passages) {
-          addPassage(passage);
-        }
-    }
-  }
-
-  addPassage(passage);
-  return books;
 }

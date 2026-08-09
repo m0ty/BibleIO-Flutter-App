@@ -53,6 +53,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Verify Bible Pedia runtime artifact
+        run: dart run bible_pedia_dart verify --runtime assets/bible_pedia
+
       - name: Analyze
         run: flutter analyze
 

@@ -36,7 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   bible_io: ^1.1.0
   bible_pedia_dart:
-    path: ../bible-io-pedia-dart
+    git:
+      url: https://github.com/m0ty/bible-io-pedia-dart.git
+      ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
   package_info_plus: ^10.2.1
   shared_preferences: ^2.2.0
 
@@ -65,7 +67,7 @@ flutter:
   assets:
     - LICENSE
     - assets/app_icon.png
-    - assets/bible_pedia/encyclopedia.bundle.json
+    - assets/bible_pedia/
     - bible_io_json/bible_list.json
     - bible_io_json/Arabic/
     - bible_io_json/Chinese/

@@ -74,6 +74,98 @@ void main() {
     );
   });
 
+  testWidgets('uses data-defined categories and content attribution', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final customBundle = BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'custom-category-test',
+      entries: [
+        _entry(
+          id: 'person/paul',
+          title: 'Paul',
+          type: EntryType.person,
+          categoryId: 'apostle',
+          description: 'An apostle to the nations.',
+        ),
+      ],
+      categories: [
+        CategoryDescriptor(
+          id: 'apostle',
+          label: 'Apostles',
+          entryType: EntryType.person,
+        ),
+      ],
+      rights: ContentRights(
+        license: 'TEST-1.0',
+        attribution: 'Test contributors',
+      ),
+    );
+
+    await _pumpPediaPage(
+      tester,
+      bundle: customBundle,
+      preferences: preferences,
+    );
+
+    expect(
+      find.byKey(const ValueKey('bible_pedia_category_apostle')),
+      findsOneWidget,
+    );
+    expect(find.text('Apostles'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('bible_pedia_category_person')),
+      findsNothing,
+    );
+    expect(find.text('Test contributors (TEST-1.0)'), findsOneWidget);
+  });
+
+  testWidgets('keeps ranked search results in relevance order', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final rankedBundle = BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'ranked-search-test',
+      entries: [
+        _entry(
+          id: 'person/aaron',
+          title: 'Aaron',
+          type: EntryType.person,
+          description: 'Aaron witnessed the covenant.',
+        ),
+        _entry(
+          id: 'concept/covenant',
+          title: 'Covenant',
+          type: EntryType.concept,
+          description: 'A binding promise.',
+        ),
+      ],
+    );
+
+    await _pumpPediaPage(
+      tester,
+      bundle: rankedBundle,
+      preferences: preferences,
+    );
+    await tester.enterText(
+      find.byKey(const Key('bible_pedia_search_field')),
+      'covenant',
+    );
+    await tester.pump();
+    expect(_resultCount(tester), '2');
+
+    final exactTitle = find.byKey(
+      const ValueKey('bible_pedia_entry_concept/covenant'),
+    );
+    final descriptionMatch = find.byKey(
+      const ValueKey('bible_pedia_entry_person/aaron'),
+    );
+    expect(exactTitle, findsOneWidget);
+    expect(descriptionMatch, findsNothing);
+  });
+
   testWidgets('groups Moses references by book and expands independently', (
     WidgetTester tester,
   ) async {
@@ -351,6 +443,11 @@ void main() {
 
     expect(find.byKey(const Key('bible_pedia_chapter_empty')), findsOneWidget);
     expect(find.text('Genesis 1'), findsOneWidget);
+    expect(find.text('Chapter not covered yet'), findsOneWidget);
+    expect(
+      find.text('This chapter has not been reviewed for Bible Pedia yet.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('can open directly on the current chapter section', (
@@ -451,6 +548,29 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const Key('bible_pedia_recent_empty')), findsNothing);
+  });
+
+  testWidgets('Recent resolves legacy IDs without duplicate entries', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      BiblePediaHistory.preferenceKey: ['person/saul', 'person/paul'],
+    });
+    final preferences = await SharedPreferences.getInstance();
+    await _pumpPediaPage(tester, bundle: bundle, preferences: preferences);
+
+    await _selectTab(tester, 'bible_pedia_recent_tab');
+
+    final recentList = find.byKey(
+      const PageStorageKey('bible_pedia_recent_list'),
+    );
+    expect(
+      find.descendant(
+        of: recentList,
+        matching: find.byKey(const ValueKey('bible_pedia_entry_person/paul')),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('selecting a citation returns its first Bible location', (
@@ -616,6 +736,34 @@ void main() {
     expect(find.byKey(const Key('bible_pedia_error')), findsNothing);
     expect(find.byKey(const Key('bible_pedia_search_field')), findsOneWidget);
     expect(attempts, 2);
+  });
+
+  testWidgets('invalid bundle errors are not presented as retryable', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+
+    Future<BibleEncyclopediaBundle> loader() =>
+        Future<BibleEncyclopediaBundle>.error(
+          InvalidEncyclopediaContentException(
+            'invalid test bundle',
+            artifact: 'bundle',
+          ),
+        );
+
+    await tester.pumpWidget(
+      _pediaTestApp(preferences: preferences, bundleLoader: loader),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('bible_pedia_error')), findsOneWidget);
+    expect(
+      find.text(
+        'The bundled encyclopedia data is invalid or incompatible with this app.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('bible_pedia_retry_button')), findsNothing);
   });
 
   testWidgets('layout remains scrollable at 320x480 with text scale 2', (
@@ -836,9 +984,15 @@ BibleEncyclopediaBundle _buildBundle() {
   return BibleEncyclopediaBundle(
     languageCode: 'en',
     contentVersion: 'test-1',
+    coverage: EditorialCoverage(
+      books: [
+        BookCoverage(book: BibleBookEnum.acts, status: CoverageStatus.covered),
+      ],
+    ),
     entries: [
       _entry(
         id: 'person/paul',
+        legacyIds: const ['person/saul'],
         title: 'Paul',
         type: EntryType.person,
         description: '# Paul\nPaul was an apostle to the nations.',
@@ -887,8 +1041,10 @@ BibleEncyclopediaBundle _buildBundle() {
 
 EncyclopediaEntry _entry({
   required String id,
+  Iterable<String> legacyIds = const [],
   required String title,
   required EntryType type,
+  String? categoryId,
   required String description,
   Iterable<String> aliases = const [],
   Iterable<BibleCitation> references = const [],
@@ -897,8 +1053,10 @@ EncyclopediaEntry _entry({
 }) {
   return EncyclopediaEntry(
     id: id,
+    legacyIds: legacyIds,
     title: title,
     type: type,
+    categoryId: categoryId,
     descriptionMarkdown: description,
     aliases: aliases,
     bibleReferences: references,

@@ -103,31 +103,43 @@ flutter test
 
 ## Bible Pedia Development
 
-During development, the app uses the unpublished sibling package through this
-path dependency:
+The unpublished package is pinned to a full Git commit so clean CI and release
+checkouts resolve the same code:
 
 ```yaml
 bible_pedia_dart:
-  path: ../bible-io-pedia-dart
+  git:
+    url: https://github.com/m0ty/bible-io-pedia-dart.git
+    ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
 ```
 
-The Bible Pedia screen provides three views: entries grouped by category,
-entries relevant to the currently open chapter, and recently opened entries.
-The runtime bundle is an app-owned asset, so sync it from the sibling package
-before running the app:
+The Bible Pedia screen uses the package's ranked search, data-defined
+categories, legacy-ID redirects, and explicit chapter coverage. It provides
+three views: browse, the currently open chapter, and recently opened entries.
+
+The runtime data remains an app-owned asset. With the updated package checked
+out at `../bible-io-pedia-dart`, export and verify it with:
 
 ```powershell
 .\tool\sync_bible_pedia.ps1
 ```
 
-Run the sync command again whenever the package regenerates
-`data/encyclopedia.bundle.json`; Flutter does not automatically refresh the
-copy under `assets/bible_pedia/`.
+The command validates the generated repository, exports a compact bundle, and
+checks `assets/bible_pedia/runtime.manifest.json` and its SHA-256 payload hash.
+Run it whenever the sibling's `data/` directory changes. To use another data
+checkout, pass `-DataPath C:\path\to\data`.
 
-The sibling path is a development dependency while the package is unpublished.
-A clean CI or release checkout must either check out `bible-io-pedia-dart` beside
-this repository or replace the path with a Git/pub dependency before running
-`flutter pub get`.
+Advance the Git `ref` before syncing data produced by newer package code. The
+code revision and runtime data should be reviewed together. The current dataset
+contains no images; the sync command intentionally fails if images appear
+because Flutter asset directories are not recursive and the app does not yet
+render encyclopedia images.
+
+To verify the checked-in artifact without regenerating it:
+
+```powershell
+dart run bible_pedia_dart verify --runtime assets/bible_pedia
+```
 
 ## Creating a Release
 
