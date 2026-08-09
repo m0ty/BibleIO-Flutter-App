@@ -5,6 +5,11 @@ BibleIO Reader is an offline, multilingual Flutter Bible app powered by the
 reading experience with fast passage navigation, advanced search, responsive
 layouts, and locally bundled translations.
 
+## Try It Online
+
+**[Open BibleIO Reader](https://m0ty.github.io/BibleIO-Flutter-App/)** in your
+browser—no installation required.
+
 ## Features
 
 - Read 19 bundled Bible editions across 14 languages without a network connection
