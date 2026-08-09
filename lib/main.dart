@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/bible_color_preset.dart';
 import 'pages/bible_home_page.dart';
+import 'widgets/desktop_mouse_back_handler.dart';
 
 const _kThemeModePrefKey = 'theme_mode';
 const _kSelectedBibleColorPresetIdPrefKey = 'selected_bible_color_preset_id';
@@ -31,6 +32,7 @@ class BibleReaderApp extends StatefulWidget {
 }
 
 class _BibleReaderAppState extends State<BibleReaderApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   List<BibleColorPreset> _customColorPresets = [];
   BibleColorPreset _selectedColorPreset = builtInBibleColorPresets.first;
   bool _initialized = false;
@@ -147,9 +149,11 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
   Widget build(BuildContext context) {
     if (!_initialized) {
       return MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'BibleIO Reader',
         debugShowCheckedModeBanner: false,
         theme: _buildAppTheme(builtInBibleColorPresets.first),
+        builder: _buildApp,
         home: const _AppStartupView(),
       );
     }
@@ -157,9 +161,11 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
     final theme = _buildAppTheme(_selectedColorPreset);
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'BibleIO Reader',
       debugShowCheckedModeBanner: false,
       theme: theme,
+      builder: _buildApp,
       home: BibleHomePage(
         colorPresets: [...builtInBibleColorPresets, ..._customColorPresets],
         selectedColorPreset: _selectedColorPreset,
@@ -167,6 +173,13 @@ class _BibleReaderAppState extends State<BibleReaderApp> {
         onCustomColorPresetSaved: _saveCustomColorPreset,
         onCustomColorPresetDeleted: _deleteCustomColorPreset,
       ),
+    );
+  }
+
+  Widget _buildApp(BuildContext context, Widget? child) {
+    return DesktopMouseBackHandler(
+      navigatorKey: _navigatorKey,
+      child: child ?? const SizedBox.shrink(),
     );
   }
 

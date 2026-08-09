@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bible/main.dart';
 import 'package:flutter_bible/models/bible_color_preset.dart';
+import 'package:flutter_bible/pages/bible_pedia_page.dart';
 import 'package:flutter_bible/pages/settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -41,6 +44,9 @@ void main() {
 
       expect(find.text('BibleIO Reader'), findsOneWidget);
       expect(find.byTooltip('Go to a Bible reference'), findsOneWidget);
+      final biblePediaButton = find.byKey(const Key('open_bible_pedia_button'));
+      expect(biblePediaButton, findsOneWidget);
+      expect(biblePediaButton.hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       tester.view.physicalSize = const Size(1280, 800);
@@ -68,6 +74,49 @@ void main() {
         find.byType(SingleChildScrollView),
       );
       expect(readerScrollView.controller!.offset, greaterThan(0));
+
+      expect(biblePediaButton.hitTestable(), findsOneWidget);
+      await tester.tap(biblePediaButton);
+      await _pumpUntilFound(tester, find.byType(BiblePediaPage));
+      expect(find.byType(BiblePediaPage), findsOneWidget);
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('bible_pedia_search_field')),
+      );
+      expect(
+        find.byKey(const Key('bible_pedia_search_field')).hitTestable(),
+        findsOneWidget,
+      );
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await _sendMouseBackButton(tester);
+        await tester.pumpAndSettle();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+      final chapterPediaNavigation = find.byKey(
+        const Key('open_bible_pedia_navigation'),
+      );
+      expect(chapterPediaNavigation.hitTestable(), findsOneWidget);
+      await tester.tap(chapterPediaNavigation);
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('bible_pedia_current_chapter_header')),
+      );
+      await tester.pumpAndSettle();
+
+      final currentChapterHeader = find.byKey(
+        const Key('bible_pedia_current_chapter_header'),
+      );
+      expect(currentChapterHeader, findsOneWidget);
+      expect(
+        find.descendant(
+          of: currentChapterHeader,
+          matching: find.text('John 3'),
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
     timeout: const Timeout(Duration(minutes: 1)),
@@ -255,4 +304,15 @@ Future<void> _pumpUntilFound(
     findsWidgets,
     reason: 'Widget was not found within ${timeout.inSeconds} seconds.',
   );
+}
+
+Future<void> _sendMouseBackButton(WidgetTester tester) async {
+  final pointer = TestPointer(99, PointerDeviceKind.mouse);
+  const position = Offset(20, 20);
+  await tester.sendEventToBinding(pointer.addPointer(location: position));
+  await tester.sendEventToBinding(
+    pointer.down(position, buttons: kBackMouseButton),
+  );
+  await tester.sendEventToBinding(pointer.up());
+  await tester.sendEventToBinding(pointer.removePointer());
 }

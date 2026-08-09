@@ -16,6 +16,7 @@ browser—no installation required.
 - Browse translations by language and retain a separate reading position for each edition
 - Jump to multilingual references and passage ranges such as `John 3:16` or `Romans 8:1-4`
 - Search with phrase, all-word, or any-word matching, filters, highlighting, and pagination
+- Explore Bible Pedia by section, current chapter, and recently opened entries
 - Load and prepare large translations in the background with progress feedback
 - Use responsive compact and wide layouts with right-to-left scripture support
 - Customize text size, verse spacing, and reusable reading color presets
@@ -100,6 +101,34 @@ flutter analyze
 flutter test
 ```
 
+## Bible Pedia Development
+
+During development, the app uses the unpublished sibling package through this
+path dependency:
+
+```yaml
+bible_pedia_dart:
+  path: ../bible-io-pedia-dart
+```
+
+The Bible Pedia screen provides three views: entries grouped by category,
+entries relevant to the currently open chapter, and recently opened entries.
+The runtime bundle is an app-owned asset, so sync it from the sibling package
+before running the app:
+
+```powershell
+.\tool\sync_bible_pedia.ps1
+```
+
+Run the sync command again whenever the package regenerates
+`data/encyclopedia.bundle.json`; Flutter does not automatically refresh the
+copy under `assets/bible_pedia/`.
+
+The sibling path is a development dependency while the package is unpublished.
+A clean CI or release checkout must either check out `bible-io-pedia-dart` beside
+this repository or replace the path with a Git/pub dependency before running
+`flutter pub get`.
+
 ## Creating a Release
 
 Pushing a semantic version tag in the form `Release-x.x.x` starts the GitHub
@@ -126,11 +155,16 @@ provisioning profile.
 
 - `lib/main.dart` - application entry point, theme, and color-preset persistence
 - `lib/pages/bible_home_page.dart` - responsive reader and Bible navigation
+- `lib/pages/bible_pedia_page.dart` - encyclopedia browse, chapter, and recent views
+- `lib/pages/bible_pedia_entry_page.dart` - encyclopedia entry details and links
 - `lib/pages/search_page.dart` - paginated, highlighted scripture search
 - `lib/pages/settings_page.dart` - translation, display, theme, and app settings
 - `lib/services/bible_loader.dart` - catalog lookup and background Bible loading
+- `lib/services/bible_pedia_loader.dart` - lazy encyclopedia bundle loading
+- `lib/services/bible_pedia_history.dart` - bounded recent-entry persistence
 - `lib/models/` - reader-specific value types
 - `bible_io_json/` - bundled translation catalog and Bible content
+- `assets/bible_pedia/` - synced Bible Pedia runtime bundle
 - `test/` - loader, reader, settings, and search coverage
 
 ## Bible Data and Licensing

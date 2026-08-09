@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bible_color_preset.dart';
 import '../services/bible_loader.dart';
+import 'bible_pedia_page.dart';
 import 'search_page.dart';
 import 'settings_page.dart';
 
@@ -416,10 +417,17 @@ class _BibleHomePageState extends State<BibleHomePage> {
                 onPressed: _bible == null ? null : _openSearch,
               ),
               IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                tooltip: 'Reader settings',
-                onPressed: _openSettings,
+                key: const Key('open_bible_pedia_button'),
+                icon: const Icon(Icons.local_library_outlined),
+                tooltip: 'Open Bible Pedia',
+                onPressed: _openBiblePedia,
               ),
+              if (constraints.maxWidth >= 420)
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  tooltip: 'Reader settings',
+                  onPressed: _openSettings,
+                ),
               const SizedBox(width: 4),
             ],
           ),
@@ -564,6 +572,19 @@ class _BibleHomePageState extends State<BibleHomePage> {
                   ),
           ),
           const Divider(),
+          ListTile(
+            key: const Key('open_bible_pedia_navigation'),
+            leading: const Icon(Icons.local_library_outlined),
+            title: const Text('Bible Pedia'),
+            subtitle: _location == null
+                ? const Text('People, places, events, and concepts')
+                : Text('Explore ${_selectedBook?.name} ${_location!.chapter}'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () {
+              closeDrawer();
+              _openBiblePedia(initialSection: BiblePediaSection.currentChapter);
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Reader settings'),
@@ -928,6 +949,40 @@ class _BibleHomePageState extends State<BibleHomePage> {
             SearchPage(bible: bible, onResultSelected: _navigateToLocation),
       ),
     );
+  }
+
+  Future<void> _openBiblePedia({
+    BiblePediaSection initialSection = BiblePediaSection.browse,
+  }) async {
+    final location = _location;
+    final selectedBook = _selectedBook;
+    final target = await Navigator.of(context).push<BibleLocation>(
+      MaterialPageRoute<BibleLocation>(
+        settings: const RouteSettings(name: '/bible-pedia'),
+        builder: (context) => BiblePediaPage(
+          currentLocation: location,
+          currentChapterLabel: location == null || selectedBook == null
+              ? null
+              : '${selectedBook.name} ${location.chapter}',
+          preferences: _preferences,
+          initialSection: initialSection,
+        ),
+      ),
+    );
+    if (target == null || !mounted) return;
+
+    final bible = _bible;
+    if (bible == null || !bible.containsReference(target)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${target.reference} is not available in the current translation.',
+          ),
+        ),
+      );
+      return;
+    }
+    _navigateToLocation(target);
   }
 
   Future<void> _openReferenceDialog() async {
