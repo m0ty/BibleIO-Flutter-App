@@ -110,7 +110,7 @@ checkouts resolve the same code:
 bible_pedia_dart:
   git:
     url: https://github.com/m0ty/bible-io-pedia-dart.git
-    ref: 9bd92b21ceab6f57cc2aa2c7a976775b7d49db2f
+    ref: 181e116cb43b0ad5c3c0c11239899acce955bbcd
 ```
 
 The Bible Pedia screen loads a `BiblePediaArtifact`, keeping the unified dataset
@@ -139,14 +139,30 @@ Flutter asset-directory declarations are not recursive, the sync command also
 regenerates the marked Bible Pedia asset list in `pubspec.yaml`; do not edit the
 contents between those generated markers by hand. Entry pages resolve local
 images through the artifact's resource root rather than a widget-level asset
-constant. They render asset/HTTPS resources and bounded `data:image/*` sources
-together with available captions, credits, and licenses.
+constant. Flutter supplies only the asset/HTTPS byte transport: the package
+verifies manifest hashes, HTTPS credentials policy, MIME allow-lists, and
+payload limits before `Image.memory` receives any bytes. Bounded
+`data:image/*` sources pass through the same verifier, and verified copies may
+be reused by the app cache. Captions, credits, and licenses remain available
+alongside the media.
+
+Remote image responses are consumed as bounded streams. On IO-backed
+platforms, automatic redirects are disabled and each redirect target is
+revalidated as credential-free HTTPS. Browser transports cannot expose manual
+redirect responses, so Flutter Web fails closed on redirected images; direct
+cross-origin image URLs must also permit CORS. Declared and observed byte
+counts are capped before decoding on every platform.
+
+The app loader delegates strict manifest/bundle decoding to
+`BiblePediaArtifactCodec` and uses Flutter `compute` through its async delegate,
+keeping eager decode and index construction off the UI isolate.
 
 Descriptions are parsed by the package into a platform-neutral block/inline
 document tree. Flutter renders headings, emphasis, code, quotes, lists, and
-typed links without maintaining a second Markdown parser. Canonical
-`entry://` destinations navigate inside Bible Pedia; HTTPS destinations open
-through the platform URL launcher, while unsafe schemes are refused.
+typed links from the entry's cached document without maintaining a second
+Markdown parser. Canonical `entry://` destinations navigate inside Bible Pedia;
+credential-free HTTPS destinations open through the platform URL launcher,
+while the package's shared safe-link policy refuses unsafe schemes.
 
 To verify the checked-in artifact without regenerating it:
 

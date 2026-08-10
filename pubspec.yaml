@@ -38,9 +38,10 @@ dependencies:
   bible_pedia_dart:
     git:
       url: https://github.com/m0ty/bible-io-pedia-dart.git
-      ref: 9bd92b21ceab6f57cc2aa2c7a976775b7d49db2f
+      ref: 181e116cb43b0ad5c3c0c11239899acce955bbcd
   package_info_plus: ^10.2.1
   shared_preferences: ^2.2.0
+  http: ^1.6.0
   url_launcher: ^6.3.2
 
 dev_dependencies:

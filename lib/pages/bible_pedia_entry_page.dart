@@ -31,11 +31,12 @@ class BiblePediaEntryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final galleryImages = _galleryImages;
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: '${entry.title}, ${_categoryLabel(entry.type)}',
+      label: '${entry.title}, ${_categoryLabel(dataset, entry)}',
       child: Scaffold(
         key: const Key('bible_pedia_entry_page'),
         appBar: AppBar(title: const Text('Bible Pedia')),
@@ -64,10 +65,10 @@ class BiblePediaEntryPage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _EntryHeader(entry: entry),
-                          if (entry.images.isNotEmpty) ...[
+                          _EntryHeader(entry: entry, dataset: dataset),
+                          if (galleryImages.isNotEmpty) ...[
                             const SizedBox(height: 20),
-                            _buildImagesSection(),
+                            _buildImagesSection(galleryImages),
                           ],
                           const SizedBox(height: 20),
                           _buildDescriptionSection(context),
@@ -90,8 +91,7 @@ class BiblePediaEntryPage extends StatelessWidget {
     );
   }
 
-  Widget _buildImagesSection() {
-    final images = entry.images;
+  Widget _buildImagesSection(List<EncyclopediaImage> images) {
     return _EntrySection(
       key: const Key('bible_pedia_entry_images_section'),
       icon: Icons.photo_library_outlined,
@@ -117,22 +117,70 @@ class BiblePediaEntryPage extends StatelessWidget {
   }
 
   Widget _buildDescriptionSection(BuildContext context) {
-    final description = entry.descriptionMarkdown.trim();
+    final structuredImages = <EncyclopediaImageSource, EncyclopediaImage>{
+      for (final image in entry.images) image.imageSource: image,
+    };
     return _EntrySection(
       key: const Key('bible_pedia_entry_description_section'),
       icon: Icons.subject_rounded,
       title: 'About',
-      child: description.isEmpty
+      child: entry.document.blocks.isEmpty
           ? const _EmptySectionMessage(
               key: Key('bible_pedia_entry_description_empty'),
               message: 'No description is available for this entry yet.',
             )
           : BiblePediaDocumentView(
               key: const Key('bible_pedia_entry_description'),
-              document: BiblePediaMarkdown.parse(description),
+              document: entry.document,
               onLinkSelected: (link) => _openDescriptionLink(context, link),
+              imageBuilder: (context, image) => _buildMarkdownImage(
+                image,
+                structuredImages: structuredImages,
+              ),
             ),
     );
+  }
+
+  Widget _buildMarkdownImage(
+    MarkdownImage markdownImage, {
+    required Map<EncyclopediaImageSource, EncyclopediaImage> structuredImages,
+  }) {
+    final source = markdownImage.imageSource;
+    if (source == null) {
+      return Text(
+        markdownImage.altText,
+        style: const TextStyle(fontStyle: FontStyle.italic),
+      );
+    }
+    final title = markdownImage.title;
+    final image =
+        structuredImages[source] ??
+        EncyclopediaImage(
+          source: source.value,
+          altText: markdownImage.altText,
+          caption: title == null || title.trim().isEmpty ? null : title,
+        );
+    final span = markdownImage.sourceSpan;
+    return BiblePediaImageFigure(
+      key: ValueKey(
+        'bible_pedia_markdown_image_'
+        '${span?.startOffset ?? source.value}_'
+        '${span?.endOffset ?? ''}',
+      ),
+      image: image,
+      artifact: artifact,
+    );
+  }
+
+  List<EncyclopediaImage> get _galleryImages {
+    final embeddedSources = <EncyclopediaImageSource>{
+      for (final markdownImage in entry.document.images)
+        ?markdownImage.imageSource,
+    };
+    return [
+      for (final image in entry.images)
+        if (!embeddedSources.contains(image.imageSource)) image,
+    ];
   }
 
   Widget _buildReferencesSection() {
@@ -218,7 +266,7 @@ class BiblePediaEntryPage extends StatelessWidget {
       if (isIncoming) 'Link text: ${relationship.label}',
       if (!isIncoming && relationship.label != relatedEntry.title)
         relationship.label,
-      _categoryLabel(relatedEntry.type),
+      _categoryLabel(dataset, relatedEntry),
     ];
     final semanticsLabel = '${relatedEntry.title}. ${details.join('. ')}.';
 
@@ -272,31 +320,25 @@ class BiblePediaEntryPage extends StatelessWidget {
   }
 
   void _openDescriptionLink(BuildContext context, MarkdownLink link) {
-    final entryUri = link.entryUri;
-    if (entryUri != null) {
-      final resolution = entryUri.resolve(dataset);
-      final target = resolution.entry;
-      if (target != null) {
-        if (target.id != entry.id) _openRelatedEntry(context, target);
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This Bible Pedia entry is unavailable.')),
-      );
-      return;
+    switch (link.safeTarget) {
+      case SafeEntryLinkTarget(:final entryUri):
+        final target = entryUri.resolve(dataset).entry;
+        if (target != null) {
+          if (target.id != entry.id) _openRelatedEntry(context, target);
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This Bible Pedia entry is unavailable.'),
+          ),
+        );
+      case SafeHttpsLinkTarget(:final uri):
+        _launchExternalLink(context, uri);
+      case null:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This link cannot be opened safely.')),
+        );
     }
-
-    final uri = link.uri;
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This link cannot be opened safely.')),
-      );
-      return;
-    }
-    _launchExternalLink(context, uri);
   }
 
   Future<void> _launchExternalLink(BuildContext context, Uri uri) async {
@@ -343,9 +385,10 @@ class BiblePediaEntryPage extends StatelessWidget {
 }
 
 class _EntryHeader extends StatelessWidget {
-  const _EntryHeader({required this.entry});
+  const _EntryHeader({required this.entry, required this.dataset});
 
   final EncyclopediaEntry entry;
+  final BiblePediaDataset dataset;
 
   @override
   Widget build(BuildContext context) {
@@ -358,7 +401,7 @@ class _EntryHeader extends StatelessWidget {
     return Semantics(
       container: true,
       header: true,
-      label: '${entry.title}, ${_categoryLabel(entry.type)}$aliases',
+      label: '${entry.title}, ${_categoryLabel(dataset, entry)}$aliases',
       excludeSemantics: true,
       child: DecoratedBox(
         key: const Key('bible_pedia_entry_header'),
@@ -395,7 +438,7 @@ class _EntryHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _categoryLabel(entry.type).toUpperCase(),
+                          _categoryLabel(dataset, entry).toUpperCase(),
                           key: const Key('bible_pedia_entry_category'),
                           style: theme.textTheme.labelLarge?.copyWith(
                             color: colors.onPrimaryContainer,
@@ -730,13 +773,15 @@ IconData _categoryIcon(EntryType type) => switch (type) {
   EntryType.other => Icons.category_outlined,
 };
 
-String _categoryLabel(EntryType type) => switch (type) {
-  EntryType.person => 'Person',
-  EntryType.location => 'Location',
-  EntryType.event => 'Event',
-  EntryType.concept => 'Concept',
-  EntryType.other => 'Other',
-};
+String _categoryLabel(BiblePediaDataset dataset, EncyclopediaEntry entry) =>
+    dataset.categoryById(entry.categoryId)?.singularLabel ??
+    switch (entry.type) {
+      EntryType.person => 'Person',
+      EntryType.location => 'Location',
+      EntryType.event => 'Event',
+      EntryType.concept => 'Concept',
+      EntryType.other => 'Other',
+    };
 
 final class _BookReferenceGroup {
   const _BookReferenceGroup({required this.book, required this.references});

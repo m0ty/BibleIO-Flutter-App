@@ -3,6 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 typedef BiblePediaDocumentLinkSelected = void Function(MarkdownLink link);
+typedef BiblePediaDocumentImageBuilder =
+    Widget Function(BuildContext context, MarkdownImage image);
 
 /// Renders the package-owned, platform-neutral Bible Pedia document tree.
 class BiblePediaDocumentView extends StatelessWidget {
@@ -10,10 +12,12 @@ class BiblePediaDocumentView extends StatelessWidget {
     super.key,
     required this.document,
     this.onLinkSelected,
+    this.imageBuilder,
   });
 
   final BiblePediaDocument document;
   final BiblePediaDocumentLinkSelected? onLinkSelected;
+  final BiblePediaDocumentImageBuilder? imageBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -21,16 +25,22 @@ class BiblePediaDocumentView extends StatelessWidget {
       child: _DocumentBlocks(
         blocks: document.blocks,
         onLinkSelected: onLinkSelected,
+        imageBuilder: imageBuilder,
       ),
     );
   }
 }
 
 class _DocumentBlocks extends StatelessWidget {
-  const _DocumentBlocks({required this.blocks, this.onLinkSelected});
+  const _DocumentBlocks({
+    required this.blocks,
+    this.onLinkSelected,
+    this.imageBuilder,
+  });
 
   final List<MarkdownBlock> blocks;
   final BiblePediaDocumentLinkSelected? onLinkSelected;
+  final BiblePediaDocumentImageBuilder? imageBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +63,7 @@ class _DocumentBlocks extends StatelessWidget {
         inlines: children,
         style: theme.textTheme.bodyLarge?.copyWith(height: 1.55),
         onLinkSelected: onLinkSelected,
+        imageBuilder: imageBuilder,
       ),
       MarkdownHeading(:final level, :final children) => Semantics(
         header: true,
@@ -64,6 +75,7 @@ class _DocumentBlocks extends StatelessWidget {
             _ => theme.textTheme.titleSmall,
           }?.copyWith(fontWeight: FontWeight.w700, height: 1.3),
           onLinkSelected: onLinkSelected,
+          imageBuilder: imageBuilder,
         ),
       ),
       MarkdownBlockQuote(:final blocks) => Container(
@@ -79,6 +91,7 @@ class _DocumentBlocks extends StatelessWidget {
           child: _DocumentBlocks(
             blocks: blocks,
             onLinkSelected: onLinkSelected,
+            imageBuilder: imageBuilder,
           ),
         ),
       ),
@@ -92,6 +105,7 @@ class _DocumentBlocks extends StatelessWidget {
                 marker: ordered ? '${start + index}.' : '\u2022',
                 item: items[index],
                 onLinkSelected: onLinkSelected,
+                imageBuilder: imageBuilder,
               ),
             ),
         ],
@@ -126,11 +140,13 @@ class _MarkdownListItemView extends StatelessWidget {
     required this.marker,
     required this.item,
     this.onLinkSelected,
+    this.imageBuilder,
   });
 
   final String marker;
   final MarkdownListItem item;
   final BiblePediaDocumentLinkSelected? onLinkSelected;
+  final BiblePediaDocumentImageBuilder? imageBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +165,7 @@ class _MarkdownListItemView extends StatelessWidget {
           child: _DocumentBlocks(
             blocks: item.blocks,
             onLinkSelected: onLinkSelected,
+            imageBuilder: imageBuilder,
           ),
         ),
       ],
@@ -161,11 +178,13 @@ class _MarkdownInlineText extends StatefulWidget {
     required this.inlines,
     required this.style,
     this.onLinkSelected,
+    this.imageBuilder,
   });
 
   final List<MarkdownInline> inlines;
   final TextStyle? style;
   final BiblePediaDocumentLinkSelected? onLinkSelected;
+  final BiblePediaDocumentImageBuilder? imageBuilder;
 
   @override
   State<_MarkdownInlineText> createState() => _MarkdownInlineTextState();
@@ -192,22 +211,30 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
     _disposeRecognizers();
     final colors = Theme.of(context).colorScheme;
     return Text.rich(
-      TextSpan(children: _spans(widget.inlines, colors)),
+      TextSpan(children: _spans(context, widget.inlines, colors)),
       style: widget.style,
     );
   }
 
   List<InlineSpan> _spans(
+    BuildContext context,
     Iterable<MarkdownInline> inlines,
     ColorScheme colors, {
     TapGestureRecognizer? recognizer,
     MouseCursor? mouseCursor,
   }) => [
     for (final inline in inlines)
-      _span(inline, colors, recognizer: recognizer, mouseCursor: mouseCursor),
+      _span(
+        context,
+        inline,
+        colors,
+        recognizer: recognizer,
+        mouseCursor: mouseCursor,
+      ),
   ];
 
   InlineSpan _span(
+    BuildContext context,
     MarkdownInline inline,
     ColorScheme colors, {
     TapGestureRecognizer? recognizer,
@@ -222,6 +249,7 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
       MarkdownEmphasis(:final children) => TextSpan(
         style: const TextStyle(fontStyle: FontStyle.italic),
         children: _spans(
+          context,
           children,
           colors,
           recognizer: recognizer,
@@ -231,6 +259,7 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
       MarkdownStrong(:final children) => TextSpan(
         style: const TextStyle(fontWeight: FontWeight.w700),
         children: _spans(
+          context,
           children,
           colors,
           recognizer: recognizer,
@@ -240,6 +269,7 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
       MarkdownStrikethrough(:final children) => TextSpan(
         style: const TextStyle(decoration: TextDecoration.lineThrough),
         children: _spans(
+          context,
           children,
           colors,
           recognizer: recognizer,
@@ -255,14 +285,8 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
         recognizer: recognizer,
         mouseCursor: mouseCursor,
       ),
-      MarkdownLink() => _linkSpan(inline, colors),
-      MarkdownImage(:final altText) => TextSpan(
-        text: altText,
-        style: const TextStyle(fontStyle: FontStyle.italic),
-        semanticsLabel: altText,
-        recognizer: recognizer,
-        mouseCursor: mouseCursor,
-      ),
+      MarkdownLink() => _linkSpan(context, inline, colors),
+      MarkdownImage() => _imageSpan(context, inline),
       MarkdownLineBreak() => TextSpan(
         text: '\n',
         recognizer: recognizer,
@@ -271,7 +295,11 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
     };
   }
 
-  InlineSpan _linkSpan(MarkdownLink link, ColorScheme colors) {
+  InlineSpan _linkSpan(
+    BuildContext context,
+    MarkdownLink link,
+    ColorScheme colors,
+  ) {
     final callback = widget.onLinkSelected;
     TapGestureRecognizer? recognizer;
     if (callback != null) {
@@ -280,6 +308,7 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
     }
     return TextSpan(
       children: _spans(
+        context,
         link.children,
         colors,
         recognizer: recognizer,
@@ -289,6 +318,24 @@ class _MarkdownInlineTextState extends State<_MarkdownInlineText> {
         color: colors.primary,
         decoration: TextDecoration.underline,
         decorationColor: colors.primary,
+      ),
+    );
+  }
+
+  InlineSpan _imageSpan(BuildContext context, MarkdownImage image) {
+    final builder = widget.imageBuilder;
+    if (builder == null) {
+      return TextSpan(
+        text: image.altText,
+        style: const TextStyle(fontStyle: FontStyle.italic),
+        semanticsLabel: image.altText,
+      );
+    }
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: builder(context, image),
       ),
     );
   }

@@ -1,19 +1,18 @@
 import 'package:bible_pedia_dart/bible_pedia.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bible/services/bible_pedia_resource_loader.dart';
 
-/// Renders one structured encyclopedia image using its validated source type.
-///
-/// Local sources must be declared by [artifact] and are confined to its
-/// resource root. Flutter maps logical `asset:` roots to [Image.asset] and
-/// HTTPS roots to [Image.network]. Authored remote sources must also use HTTPS
-/// without embedded credentials, and inline data is capped to avoid decoding
-/// unexpectedly large payloads in memory.
-class BiblePediaImageFigure extends StatelessWidget {
+/// Renders an encyclopedia image only after package-level policy/integrity
+/// validation has completed.
+class BiblePediaImageFigure extends StatefulWidget {
   const BiblePediaImageFigure({
     super.key,
     required this.image,
     required this.artifact,
     this.maxInlineImageBytes = defaultMaxInlineImageBytes,
+    this.resourceLoader,
+    this.verifiedByteCache,
   }) : assert(maxInlineImageBytes > 0);
 
   static const int defaultMaxInlineImageBytes = 5 * 1024 * 1024;
@@ -22,26 +21,100 @@ class BiblePediaImageFigure extends StatelessWidget {
   final BiblePediaArtifact artifact;
   final int maxInlineImageBytes;
 
+  /// Optional transport adapter, primarily for downloaded stores and tests.
+  final BiblePediaResourceByteLoader? resourceLoader;
+
+  /// Optional verified cache. The app-wide cache is used when omitted.
+  final BiblePediaVerifiedByteCache? verifiedByteCache;
+
+  @override
+  State<BiblePediaImageFigure> createState() => _BiblePediaImageFigureState();
+}
+
+class _BiblePediaImageFigureState extends State<BiblePediaImageFigure> {
+  AssetBundle? _inheritedAssetBundle;
+  Future<Uint8List>? _bytes;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final inherited = DefaultAssetBundle.of(context);
+    if (_bytes == null ||
+        (widget.resourceLoader == null &&
+            !identical(_inheritedAssetBundle, inherited))) {
+      _inheritedAssetBundle = inherited;
+      _beginLoad();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BiblePediaImageFigure oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.image != widget.image ||
+        !identical(oldWidget.artifact, widget.artifact) ||
+        oldWidget.maxInlineImageBytes != widget.maxInlineImageBytes ||
+        !identical(oldWidget.resourceLoader, widget.resourceLoader) ||
+        !identical(oldWidget.verifiedByteCache, widget.verifiedByteCache)) {
+      _beginLoad();
+    }
+  }
+
+  void _beginLoad() {
+    final loader =
+        widget.resourceLoader ??
+        FlutterBiblePediaResourceByteLoader(_inheritedAssetBundle!);
+    _bytes = widget.artifact.loadVerifiedImageBytes(
+      widget.image,
+      loader: loader,
+      cache: widget.verifiedByteCache ?? biblePediaVerifiedImageCache,
+      policy: BiblePediaResourcePolicy(
+        maximumBytes: widget.maxInlineImageBytes,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final attribution = <String>[
-      if (image.credit case final credit?) 'Credit: $credit',
-      if (image.license case final license?) 'License: $license',
+      if (widget.image.credit case final credit?) 'Credit: $credit',
+      if (widget.image.license case final license?) 'License: $license',
     ].join(' \u2022 ');
 
     Widget media = ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: ColoredBox(
         color: colors.surfaceContainerHighest,
-        child: _buildMedia(),
+        child: FutureBuilder<Uint8List>(
+          future: _bytes,
+          builder: (context, snapshot) {
+            if (snapshot.hasData) {
+              return Image.memory(
+                snapshot.requireData,
+                key: const Key('bible_pedia_image_media'),
+                width: double.infinity,
+                fit: BoxFit.contain,
+                semanticLabel: _semanticLabel,
+                excludeFromSemantics: widget.image.altText.isEmpty,
+                errorBuilder: _buildLoadError,
+              );
+            }
+            if (snapshot.hasError) {
+              return _buildUnavailable(_messageFor(snapshot.error!));
+            }
+            return const SizedBox(
+              key: Key('bible_pedia_image_loading'),
+              height: 152,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          },
+        ),
       ),
     );
-    final declaredRatio = image.aspectRatio;
+    final declaredRatio = widget.image.aspectRatio;
     if (declaredRatio != null) {
       media = AspectRatio(
-        // Keep valid but extreme authored metadata from collapsing the UI.
         aspectRatio: declaredRatio.clamp(0.2, 5.0).toDouble(),
         child: media,
       );
@@ -51,7 +124,7 @@ class BiblePediaImageFigure extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         media,
-        if (image.caption case final caption?) ...[
+        if (widget.image.caption case final caption?) ...[
           const SizedBox(height: 8),
           Text(
             caption,
@@ -73,75 +146,24 @@ class BiblePediaImageFigure extends StatelessWidget {
     );
   }
 
-  Widget _buildMedia() {
-    final source = image.imageSource;
-    return switch (source) {
-      LocalImageSource() => _buildLocalImage(source),
-      RemoteImageSource() => _buildRemoteImage(source),
-      DataImageSource() => _buildDataImage(source),
-    };
-  }
-
-  Widget _buildLocalImage(LocalImageSource source) {
-    late final Uri uri;
-    try {
-      uri = artifact.resolveLocalImage(source).uri;
-    } on ArgumentError {
-      return _buildUnavailable(
-        'This image is not declared by the loaded Bible Pedia artifact.',
-      );
+  String _messageFor(Object error) {
+    final source = widget.image.imageSource;
+    if (error is BiblePediaResourceException) {
+      if (error.code == BiblePediaErrorCode.resourceTooLarge &&
+          source is DataImageSource) {
+        return 'This inline image is too large to display.';
+      }
+      if (error.code == BiblePediaErrorCode.resourcePolicy &&
+          source is RemoteImageSource) {
+        return 'Only secure remote images can be displayed.';
+      }
+      if (error.code == BiblePediaErrorCode.resourceNotFound &&
+          source is LocalImageSource &&
+          error.uri == null) {
+        return 'This image is not declared by the loaded Bible Pedia artifact.';
+      }
     }
-    return switch (uri.scheme.toLowerCase()) {
-      'asset' => Image.asset(
-        uri.path.startsWith('/') ? uri.path.substring(1) : uri.path,
-        key: const Key('bible_pedia_image_media'),
-        width: double.infinity,
-        fit: BoxFit.contain,
-        semanticLabel: _semanticLabel,
-        excludeFromSemantics: image.altText.isEmpty,
-        errorBuilder: _buildLoadError,
-      ),
-      'https' => _buildNetworkImage(uri),
-      _ => _buildUnavailable(
-        'This image resource origin is not available on this device.',
-      ),
-    };
-  }
-
-  Widget _buildRemoteImage(RemoteImageSource source) {
-    if (source.uri.scheme.toLowerCase() != 'https' ||
-        source.uri.userInfo.isNotEmpty) {
-      return _buildUnavailable('Only secure remote images can be displayed.');
-    }
-    return _buildNetworkImage(source.uri);
-  }
-
-  Widget _buildNetworkImage(Uri uri) {
-    return Image.network(
-      uri.toString(),
-      key: const Key('bible_pedia_image_media'),
-      width: double.infinity,
-      fit: BoxFit.contain,
-      semanticLabel: _semanticLabel,
-      excludeFromSemantics: image.altText.isEmpty,
-      errorBuilder: _buildLoadError,
-    );
-  }
-
-  Widget _buildDataImage(DataImageSource source) {
-    final bytes = source.data.contentAsBytes();
-    if (bytes.length > maxInlineImageBytes) {
-      return _buildUnavailable('This inline image is too large to display.');
-    }
-    return Image.memory(
-      bytes,
-      key: const Key('bible_pedia_image_media'),
-      width: double.infinity,
-      fit: BoxFit.contain,
-      semanticLabel: _semanticLabel,
-      excludeFromSemantics: image.altText.isEmpty,
-      errorBuilder: _buildLoadError,
-    );
+    return 'Image unavailable.';
   }
 
   Widget _buildLoadError(
@@ -151,7 +173,9 @@ class BiblePediaImageFigure extends StatelessWidget {
   ) => _buildUnavailable('Image unavailable.');
 
   Widget _buildUnavailable(String message) => Semantics(
-    label: image.altText.isEmpty ? message : '${image.altText}. $message',
+    label: widget.image.altText.isEmpty
+        ? message
+        : '${widget.image.altText}. $message',
     child: SizedBox(
       key: const Key('bible_pedia_image_unavailable'),
       height: 152,
@@ -171,5 +195,6 @@ class BiblePediaImageFigure extends StatelessWidget {
     ),
   );
 
-  String? get _semanticLabel => image.altText.isEmpty ? null : image.altText;
+  String? get _semanticLabel =>
+      widget.image.altText.isEmpty ? null : widget.image.altText;
 }

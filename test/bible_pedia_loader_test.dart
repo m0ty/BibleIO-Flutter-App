@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:bible_io/bible_io.dart';
@@ -47,6 +46,13 @@ void main() {
       'Locations',
       'Events',
       'Concepts',
+      'Other',
+    ]);
+    expect(dataset.categories.map((category) => category.singularLabel), [
+      'Person',
+      'Location',
+      'Event',
+      'Concept',
       'Other',
     ]);
     expect(dataset.categoryCounts, {
@@ -100,13 +106,33 @@ void main() {
   });
 
   test(
-    'observes concurrent failures when both artifact assets are missing',
-    () {
+    'wraps missing artifact assets in a stable non-retryable error',
+    () async {
       final assetBundle = _TestAssetBundle(const {});
 
-      expect(
+      await expectLater(
         loadBiblePediaArtifact(assetBundle: assetBundle),
-        throwsA(isA<ParallelWaitError>()),
+        throwsA(
+          isA<EncyclopediaRepositoryException>()
+              .having(
+                (error) => error.code,
+                'code',
+                BiblePediaErrorCode.repositoryNotFound,
+              )
+              .having((error) => error.isRetryable, 'isRetryable', isFalse)
+              .having(
+                (error) => error.path,
+                'path',
+                anyOf(biblePediaBundleAssetKey, biblePediaManifestAssetKey),
+              ),
+        ),
+      );
+      expect(
+        assetBundle.requestedKeys,
+        containsAll(<String>[
+          biblePediaBundleAssetKey,
+          biblePediaManifestAssetKey,
+        ]),
       );
     },
   );
@@ -205,11 +231,9 @@ void main() {
     await expectLater(
       loadBiblePediaArtifact(assetBundle: assetBundle),
       throwsA(
-        isA<InvalidEncyclopediaContentException>().having(
-          (error) => error.message,
-          'message',
-          contains('unsupported artifact manifest schema version'),
-        ),
+        isA<UnsupportedEncyclopediaSchemaException>()
+            .having((error) => error.artifact, 'artifact', 'artifact manifest')
+            .having((error) => error.actualVersion, 'version', 2),
       ),
     );
   });

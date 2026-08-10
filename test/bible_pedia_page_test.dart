@@ -870,6 +870,35 @@ void main() {
     expect(find.byKey(const Key('bible_pedia_retry_button')), findsNothing);
   });
 
+  testWidgets('missing bundled assets are not presented as retryable', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+
+    Future<BiblePediaArtifact> loader() => Future<BiblePediaArtifact>.error(
+      const EncyclopediaRepositoryException(
+        code: BiblePediaErrorCode.repositoryNotFound,
+        message: 'missing test artifact',
+        operation: 'load runtime artifact asset',
+        path: biblePediaBundleAssetKey,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _pediaTestApp(preferences: preferences, artifactLoader: loader),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('bible_pedia_error')), findsOneWidget);
+    expect(
+      find.text(
+        'The Bible Pedia files are missing from this app installation.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('bible_pedia_retry_button')), findsNothing);
+  });
+
   testWidgets('artifact integrity failures are not presented as retryable', (
     WidgetTester tester,
   ) async {

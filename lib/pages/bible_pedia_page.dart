@@ -230,9 +230,7 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
                 key: const Key('bible_pedia_error'),
                 icon: Icons.error_outline_rounded,
                 title: 'Bible Pedia could not be opened',
-                message: canRetry
-                    ? 'Check that the encyclopedia bundle is available, then try again.'
-                    : 'The bundled encyclopedia data is invalid or incompatible with this app.',
+                message: _artifactLoadErrorMessage(error, canRetry: canRetry),
                 action: canRetry
                     ? FilledButton.icon(
                         key: const Key('bible_pedia_retry_button'),
@@ -271,6 +269,28 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
       ),
     );
   }
+}
+
+String _artifactLoadErrorMessage(Object? error, {required bool canRetry}) {
+  if (error case EncyclopediaLoadException(:final code)) {
+    return switch (code) {
+      BiblePediaErrorCode.repositoryNotFound =>
+        'The Bible Pedia files are missing from this app installation.',
+      BiblePediaErrorCode.repositoryPermissionDenied =>
+        'This app cannot access the installed Bible Pedia files.',
+      BiblePediaErrorCode.unsupportedSchema ||
+      BiblePediaErrorCode.invalidContent ||
+      BiblePediaErrorCode.resourceIntegrity =>
+        'The bundled encyclopedia data is invalid or incompatible with this app.',
+      _ when canRetry =>
+        'Check that the encyclopedia bundle is available, then try again.',
+      _ =>
+        'The bundled encyclopedia data is invalid or incompatible with this app.',
+    };
+  }
+  return canRetry
+      ? 'Check that the encyclopedia bundle is available, then try again.'
+      : 'The bundled encyclopedia data is invalid or incompatible with this app.';
 }
 
 class _BrowsePediaTab extends StatefulWidget {
@@ -513,10 +533,7 @@ class _ChapterPediaTab extends StatelessWidget {
               icon: Icons.auto_stories_rounded,
               eyebrow: 'CURRENT CHAPTER',
               title: label,
-              message: _chapterHeaderMessage(
-                matches.length,
-                results.coverageStatus,
-              ),
+              message: _chapterHeaderMessage(matches.length, results.coverage),
             ),
           );
         }
@@ -525,8 +542,8 @@ class _ChapterPediaTab extends StatelessWidget {
             child: _InlineEmptyState(
               key: const Key('bible_pedia_chapter_empty'),
               icon: Icons.travel_explore_rounded,
-              title: _chapterEmptyTitle(results.coverageStatus),
-              message: _chapterEmptyMessage(results.coverageStatus),
+              title: _chapterEmptyTitle(results.coverage),
+              message: _chapterEmptyMessage(results.coverage),
             ),
           );
         }
@@ -1088,7 +1105,7 @@ String _chapterEmptyMessage(CoverageStatus status) => switch (status) {
 };
 
 String _entrySupportingText(EncyclopediaEntry entry) {
-  final description = BiblePediaMarkdown.toPlainText(entry.descriptionMarkdown);
+  final description = entry.document.plainText;
   if (description.isNotEmpty) {
     return description.length <= 180
         ? description
