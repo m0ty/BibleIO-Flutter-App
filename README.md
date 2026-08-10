@@ -110,14 +110,15 @@ checkouts resolve the same code:
 bible_pedia_dart:
   git:
     url: https://github.com/m0ty/bible-io-pedia-dart.git
-    ref: 60872eedc4bfa5267b7325a3a85015caf709a4fe
+    ref: 9bd92b21ceab6f57cc2aa2c7a976775b7d49db2f
 ```
 
-The Bible Pedia screen uses the package's unified dataset API, Unicode-ranked
-search, data-defined categories, canonical legacy-ID redirects, typed incoming
-and outgoing relationships, rich image metadata, and explicit chapter
-coverage. It provides three views: browse, the currently open chapter, and
-recently opened entries.
+The Bible Pedia screen loads a `BiblePediaArtifact`, keeping the unified dataset
+together with its verified manifest and logical resource root. It uses
+Unicode-ranked search, data-defined categories and relationship labels,
+canonical legacy-ID redirects, typed incoming/outgoing relationships, rich
+image metadata, and explicit editorial coverage. It provides three views:
+browse, the currently open chapter, and recently opened entries.
 
 The runtime data remains an app-owned asset. With the updated package checked
 out at `../bible-io-pedia-dart`, export and verify it with:
@@ -136,9 +137,16 @@ code revision and runtime data should be reviewed together. Local encyclopedia
 images are copied and hash-verified as part of the runtime export. Because
 Flutter asset-directory declarations are not recursive, the sync command also
 regenerates the marked Bible Pedia asset list in `pubspec.yaml`; do not edit the
-contents between those generated markers by hand. Entry pages render verified
-local assets, HTTPS remote images, and bounded `data:image/*` sources together
-with available captions, credits, and licenses.
+contents between those generated markers by hand. Entry pages resolve local
+images through the artifact's resource root rather than a widget-level asset
+constant. They render asset/HTTPS resources and bounded `data:image/*` sources
+together with available captions, credits, and licenses.
+
+Descriptions are parsed by the package into a platform-neutral block/inline
+document tree. Flutter renders headings, emphasis, code, quotes, lists, and
+typed links without maintaining a second Markdown parser. Canonical
+`entry://` destinations navigate inside Bible Pedia; HTTPS destinations open
+through the platform URL launcher, while unsafe schemes are refused.
 
 To verify the checked-in artifact without regenerating it:
 
@@ -177,7 +185,7 @@ provisioning profile.
 - `lib/pages/search_page.dart` - paginated, highlighted scripture search
 - `lib/pages/settings_page.dart` - translation, display, theme, and app settings
 - `lib/services/bible_loader.dart` - catalog lookup and background Bible loading
-- `lib/services/bible_pedia_loader.dart` - lazy encyclopedia bundle loading
+- `lib/services/bible_pedia_loader.dart` - lazy artifact, manifest, and resource-root loading
 - `lib/services/bible_pedia_history.dart` - bounded recent-entry persistence
 - `lib/models/` - reader-specific value types
 - `bible_io_json/` - bundled translation catalog and Bible content

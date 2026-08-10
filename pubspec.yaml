@@ -38,13 +38,15 @@ dependencies:
   bible_pedia_dart:
     git:
       url: https://github.com/m0ty/bible-io-pedia-dart.git
-      ref: 60872eedc4bfa5267b7325a3a85015caf709a4fe
+      ref: 9bd92b21ceab6f57cc2aa2c7a976775b7d49db2f
   package_info_plus: ^10.2.1
   shared_preferences: ^2.2.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  crypto: ^3.0.6
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

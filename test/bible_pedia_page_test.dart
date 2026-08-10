@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:bible_io/bible_io.dart';
 import 'package:bible_pedia_dart/bible_pedia.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bible/pages/bible_pedia_page.dart';
 import 'package:flutter_bible/services/bible_pedia_history.dart';
+import 'package:flutter_bible/services/bible_pedia_loader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -192,6 +197,53 @@ void main() {
 
     expect(find.text('Heading Read Damascus and code_*.'), findsOneWidget);
     expect(find.textContaining('entry://'), findsNothing);
+  });
+
+  testWidgets('entry Markdown resolves legacy entry links and navigates', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final markdownBundle = BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'markdown-link-test',
+      entries: [
+        _entry(
+          id: 'person/paul',
+          legacyIds: const ['person/saul'],
+          title: 'Paul',
+          type: EntryType.person,
+          description: 'Paul was formerly known as Saul.',
+        ),
+        _entry(
+          id: 'location/damascus',
+          title: 'Damascus',
+          type: EntryType.location,
+          description: '[Saul](entry://person/saul)',
+        ),
+      ],
+    );
+
+    await _pumpPediaPage(
+      tester,
+      bundle: markdownBundle,
+      preferences: preferences,
+    );
+    await _searchFor(tester, 'Damascus');
+    await _openVisibleEntry(tester, 'location/damascus');
+
+    await tester.tapOnText(find.textRange.ofSubstring('Saul'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('bible_pedia_entry_title')))
+          .data,
+      'Paul',
+    );
+    expect(
+      find.byKey(const ValueKey('bible_pedia_entry_person/paul')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('groups Moses references by book and expands independently', (
@@ -644,7 +696,8 @@ void main() {
                               chapter: 28,
                             ),
                             preferences: preferences,
-                            datasetLoader: () async => rangeBundle,
+                            artifactLoader: () async =>
+                                _artifactFor(rangeBundle),
                           ),
                         ),
                       );
@@ -704,7 +757,7 @@ void main() {
                               chapter: 9,
                             ),
                             preferences: preferences,
-                            datasetLoader: () async => bundle,
+                            artifactLoader: () async => _artifactFor(bundle),
                           ),
                         ),
                       );
@@ -735,9 +788,7 @@ void main() {
       'Damascus',
     );
     expect(
-      find.text(
-        'Mentioned by • conversion-location • Link text: Damascus • Person',
-      ),
+      find.text('Converted here • Link text: Damascus • Person'),
       findsOneWidget,
     );
 
@@ -766,16 +817,18 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     var attempts = 0;
 
-    Future<BiblePediaDataset> loader() {
+    Future<BiblePediaArtifact> loader() {
       attempts++;
       if (attempts == 1) {
-        return Future<BiblePediaDataset>.error(StateError('test load failure'));
+        return Future<BiblePediaArtifact>.error(
+          StateError('test load failure'),
+        );
       }
-      return Future.value(bundle);
+      return Future.value(_artifactFor(bundle));
     }
 
     await tester.pumpWidget(
-      _pediaTestApp(preferences: preferences, datasetLoader: loader),
+      _pediaTestApp(preferences: preferences, artifactLoader: loader),
     );
     await tester.pumpAndSettle();
 
@@ -795,7 +848,7 @@ void main() {
   ) async {
     final preferences = await SharedPreferences.getInstance();
 
-    Future<BiblePediaDataset> loader() => Future<BiblePediaDataset>.error(
+    Future<BiblePediaArtifact> loader() => Future<BiblePediaArtifact>.error(
       InvalidEncyclopediaContentException(
         'invalid test bundle',
         artifact: 'bundle',
@@ -803,7 +856,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      _pediaTestApp(preferences: preferences, datasetLoader: loader),
+      _pediaTestApp(preferences: preferences, artifactLoader: loader),
     );
     await tester.pumpAndSettle();
 
@@ -815,6 +868,66 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('bible_pedia_retry_button')), findsNothing);
+  });
+
+  testWidgets('artifact integrity failures are not presented as retryable', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final validManifest = _integrityManifestJson(_integrityBundleJson);
+    final mismatchedManifest = jsonDecode(validManifest) as Map<String, dynamic>
+      ..['contentVersion'] = 'different';
+    final futureManifest = jsonDecode(validManifest) as Map<String, dynamic>
+      ..['schemaVersion'] = 2;
+    final scenarios = <String, Map<String, Object>>{
+      'tampered bundle': {
+        biblePediaBundleAssetKey: _integrityBundleJson.replaceFirst(
+          'test-1',
+          'test-2',
+        ),
+        biblePediaManifestAssetKey: validManifest,
+      },
+      'future manifest schema': {
+        biblePediaBundleAssetKey: _integrityBundleJson,
+        biblePediaManifestAssetKey: jsonEncode(futureManifest),
+      },
+      'mismatched artifact metadata': {
+        biblePediaBundleAssetKey: _integrityBundleJson,
+        biblePediaManifestAssetKey: jsonEncode(mismatchedManifest),
+      },
+      'malformed manifest UTF-8': {
+        biblePediaBundleAssetKey: _integrityBundleJson,
+        biblePediaManifestAssetKey: Uint8List.fromList([0xc3, 0x28]),
+      },
+    };
+
+    for (final scenario in scenarios.entries) {
+      final assetBundle = _IntegrityAssetBundle(scenario.value);
+      await tester.pumpWidget(
+        _pediaTestApp(
+          preferences: preferences,
+          artifactLoader: () =>
+              loadBiblePediaArtifact(assetBundle: assetBundle),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'The bundled encyclopedia data is invalid or incompatible with this app.',
+        ),
+        findsOneWidget,
+        reason: scenario.key,
+      );
+      expect(
+        find.byKey(const Key('bible_pedia_retry_button')),
+        findsNothing,
+        reason: scenario.key,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('layout remains scrollable at 320x480 with text scale 2', (
@@ -937,7 +1050,7 @@ Future<void> _pumpPediaPage(
   await tester.pumpWidget(
     _pediaTestApp(
       preferences: preferences,
-      datasetLoader: () async => bundle,
+      artifactLoader: () async => _artifactFor(bundle),
       currentLocation: currentLocation,
       currentChapterLabel: currentChapterLabel,
       initialSection: initialSection,
@@ -948,9 +1061,28 @@ Future<void> _pumpPediaPage(
   await tester.pumpAndSettle();
 }
 
+BiblePediaArtifact _artifactFor(BiblePediaDataset dataset) {
+  final localPaths = <String>{
+    for (final entry in dataset.entries)
+      for (final image in entry.images)
+        if (image.imageSource case LocalImageSource(:final portablePath))
+          portablePath,
+  };
+  return BiblePediaArtifact(
+    dataset: dataset,
+    manifest: BiblePediaManifest.forDataset(
+      dataset,
+      files: [
+        for (final path in localPaths) BiblePediaManifestFile(path: path),
+      ],
+    ),
+    resourceRoot: BiblePediaResourceRoot.asset('assets/test-pedia'),
+  );
+}
+
 Widget _pediaTestApp({
   required SharedPreferences preferences,
-  required BiblePediaDatasetLoader datasetLoader,
+  required BiblePediaArtifactLoader artifactLoader,
   BibleLocation? currentLocation,
   String? currentChapterLabel,
   BiblePediaSection initialSection = BiblePediaSection.browse,
@@ -971,7 +1103,7 @@ Widget _pediaTestApp({
       currentChapterLabel: currentChapterLabel,
       initialSection: initialSection,
       preferences: preferences,
-      datasetLoader: datasetLoader,
+      artifactLoader: artifactLoader,
     ),
   );
 }
@@ -1031,6 +1163,60 @@ Future<void> _openVisibleEntry(WidgetTester tester, String entryId) async {
   await tester.pumpAndSettle();
 }
 
+const _integrityBundleJson = '''
+{
+  "schemaVersion": 1,
+  "languageCode": "en",
+  "contentVersion": "test-1",
+  "entries": []
+}
+''';
+
+String _integrityManifestJson(String bundleJson) {
+  final bytes = utf8.encode(bundleJson);
+  return jsonEncode({
+    'schemaVersion': 1,
+    'datasetId': 'bible-pedia',
+    'languageCode': 'en',
+    'contentVersion': 'test-1',
+    'coverage': {'defaultStatus': 'notCovered', 'books': <Object?>[]},
+    'provenance': {
+      'generatorName': 'bible_pedia_dart',
+      'generatorVersion': 'unspecified',
+    },
+    'rights': {
+      'license': 'NOASSERTION',
+      'attribution': 'Attribution not supplied',
+    },
+    'files': [
+      {
+        'path': 'encyclopedia.bundle.json',
+        'sha256': sha256.convert(bytes).toString(),
+        'bytes': bytes.length,
+      },
+    ],
+  });
+}
+
+final class _IntegrityAssetBundle extends AssetBundle {
+  _IntegrityAssetBundle(this.sources);
+
+  final Map<String, Object> sources;
+
+  @override
+  Future<ByteData> load(String key) async {
+    final source = sources[key];
+    if (source == null) throw StateError('Missing test asset $key');
+    return ByteData.sublistView(
+      Uint8List.fromList(switch (source) {
+        String value => utf8.encode(value),
+        List<int> value => value,
+        _ => throw StateError('Unsupported test asset value for $key'),
+      }),
+    );
+  }
+}
+
 BibleEncyclopediaBundle _buildBundle() {
   return BibleEncyclopediaBundle(
     languageCode: 'en',
@@ -1040,6 +1226,13 @@ BibleEncyclopediaBundle _buildBundle() {
         BookCoverage(book: BibleBookEnum.acts, status: CoverageStatus.covered),
       ],
     ),
+    relationshipKinds: [
+      RelationshipKindDescriptor(
+        id: 'conversion-location',
+        outgoingLabel: 'Conversion location',
+        incomingLabel: 'Converted here',
+      ),
+    ],
     entries: [
       _entry(
         id: 'person/paul',

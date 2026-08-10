@@ -9,10 +9,7 @@ import '../services/bible_pedia_history.dart';
 import '../services/bible_pedia_loader.dart';
 import 'bible_pedia_entry_page.dart';
 
-typedef BiblePediaDatasetLoader = Future<BiblePediaDataset> Function();
-
-@Deprecated('Use BiblePediaDatasetLoader')
-typedef BiblePediaBundleLoader = BiblePediaDatasetLoader;
+typedef BiblePediaArtifactLoader = Future<BiblePediaArtifact> Function();
 
 enum BiblePediaSection { browse, currentChapter, recent }
 
@@ -24,22 +21,22 @@ class BiblePediaPage extends StatefulWidget {
     this.currentChapterLabel,
     this.preferences,
     this.initialSection = BiblePediaSection.browse,
-    this.datasetLoader = loadBiblePediaDataset,
+    this.artifactLoader = loadBiblePediaArtifact,
   });
 
   final BibleLocation? currentLocation;
   final String? currentChapterLabel;
   final SharedPreferences? preferences;
   final BiblePediaSection initialSection;
-  final BiblePediaDatasetLoader datasetLoader;
+  final BiblePediaArtifactLoader artifactLoader;
 
   @override
   State<BiblePediaPage> createState() => _BiblePediaPageState();
 }
 
 class _BiblePediaPageState extends State<BiblePediaPage> {
-  late Future<BiblePediaDataset> _datasetFuture;
-  BiblePediaDataset? _loadedDataset;
+  late Future<BiblePediaArtifact> _artifactFuture;
+  BiblePediaArtifact? _loadedArtifact;
   BiblePediaHistory? _history;
   List<String> _recentIds = const [];
   final List<String> _sessionRecentIds = [];
@@ -49,7 +46,7 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
   @override
   void initState() {
     super.initState();
-    _startDatasetLoad();
+    _startArtifactLoad();
     final preferences = widget.preferences;
     if (preferences != null) {
       _history = BiblePediaHistory(preferences);
@@ -98,42 +95,42 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
   }
 
   void _retryLoading() {
-    setState(_startDatasetLoad);
+    setState(_startArtifactLoad);
   }
 
-  void _startDatasetLoad() {
-    _loadedDataset = null;
-    late final Future<BiblePediaDataset> future;
-    future = widget.datasetLoader();
-    _datasetFuture = future;
+  void _startArtifactLoad() {
+    _loadedArtifact = null;
+    late final Future<BiblePediaArtifact> future;
+    future = widget.artifactLoader();
+    _artifactFuture = future;
     unawaited(
-      future.then<void>((dataset) {
-        if (!mounted || !identical(_datasetFuture, future)) return;
-        _loadedDataset = dataset;
+      future.then<void>((artifact) {
+        if (!mounted || !identical(_artifactFuture, future)) return;
+        _loadedArtifact = artifact;
         _reconcileRecentIds();
       }, onError: (Object error, StackTrace stackTrace) {}),
     );
   }
 
   void _reconcileRecentIds() {
-    final dataset = _loadedDataset;
-    if (dataset == null) return;
+    final artifact = _loadedArtifact;
+    if (artifact == null) return;
 
-    final canonicalIds = _resolveRecentIds(dataset, _recentIds);
+    final canonicalIds = _resolveRecentIds(artifact.dataset, _recentIds);
     if (_sameIds(canonicalIds, _recentIds)) return;
 
     if (mounted) setState(() => _recentIds = canonicalIds);
     _queueHistoryWrite((history) => history.replace(canonicalIds));
   }
 
-  void _openEntry(EncyclopediaEntry entry, BiblePediaDataset dataset) {
+  void _openEntry(EncyclopediaEntry entry, BiblePediaArtifact artifact) {
     _recordEntry(entry);
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         settings: RouteSettings(name: '/bible-pedia/entry/${entry.id}'),
         builder: (context) => BiblePediaEntryPage(
           entry: entry,
-          dataset: dataset,
+          artifact: artifact,
           onEntryOpened: _recordEntry,
           onCitationSelected: _openCitation,
         ),
@@ -213,8 +210,8 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
             ],
           ),
         ),
-        body: FutureBuilder<BiblePediaDataset>(
-          future: _datasetFuture,
+        body: FutureBuilder<BiblePediaArtifact>(
+          future: _artifactFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const _PediaMessage(
@@ -247,23 +244,24 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
               );
             }
 
-            final dataset = snapshot.data!;
+            final artifact = snapshot.data!;
+            final dataset = artifact.dataset;
             return TabBarView(
               children: [
                 _BrowsePediaTab(
                   dataset: dataset,
-                  onEntrySelected: (entry) => _openEntry(entry, dataset),
+                  onEntrySelected: (entry) => _openEntry(entry, artifact),
                 ),
                 _ChapterPediaTab(
                   dataset: dataset,
                   location: widget.currentLocation,
                   chapterLabel: widget.currentChapterLabel,
-                  onEntrySelected: (entry) => _openEntry(entry, dataset),
+                  onEntrySelected: (entry) => _openEntry(entry, artifact),
                 ),
                 _RecentPediaTab(
                   dataset: dataset,
                   recentIds: _recentIds,
-                  onEntrySelected: (entry) => _openEntry(entry, dataset),
+                  onEntrySelected: (entry) => _openEntry(entry, artifact),
                   onClear: _clearHistory,
                 ),
               ],

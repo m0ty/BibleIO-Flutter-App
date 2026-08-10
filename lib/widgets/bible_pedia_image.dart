@@ -1,24 +1,25 @@
 import 'package:bible_pedia_dart/bible_pedia.dart';
 import 'package:flutter/material.dart';
 
-/// Root of the verified Bible Pedia runtime artifact in Flutter's asset bundle.
-const biblePediaRuntimeAssetRoot = 'assets/bible_pedia';
-
 /// Renders one structured encyclopedia image using its validated source type.
 ///
-/// Local sources are confined to [biblePediaRuntimeAssetRoot], remote sources
-/// must use HTTPS without embedded credentials, and inline data is capped to
-/// avoid decoding unexpectedly large payloads in memory.
+/// Local sources must be declared by [artifact] and are confined to its
+/// resource root. Flutter maps logical `asset:` roots to [Image.asset] and
+/// HTTPS roots to [Image.network]. Authored remote sources must also use HTTPS
+/// without embedded credentials, and inline data is capped to avoid decoding
+/// unexpectedly large payloads in memory.
 class BiblePediaImageFigure extends StatelessWidget {
   const BiblePediaImageFigure({
     super.key,
     required this.image,
+    required this.artifact,
     this.maxInlineImageBytes = defaultMaxInlineImageBytes,
   }) : assert(maxInlineImageBytes > 0);
 
   static const int defaultMaxInlineImageBytes = 5 * 1024 * 1024;
 
   final EncyclopediaImage image;
+  final BiblePediaArtifact artifact;
   final int maxInlineImageBytes;
 
   @override
@@ -75,8 +76,24 @@ class BiblePediaImageFigure extends StatelessWidget {
   Widget _buildMedia() {
     final source = image.imageSource;
     return switch (source) {
-      LocalImageSource() => Image.asset(
-        '$biblePediaRuntimeAssetRoot/${source.portablePath}',
+      LocalImageSource() => _buildLocalImage(source),
+      RemoteImageSource() => _buildRemoteImage(source),
+      DataImageSource() => _buildDataImage(source),
+    };
+  }
+
+  Widget _buildLocalImage(LocalImageSource source) {
+    late final Uri uri;
+    try {
+      uri = artifact.resolveLocalImage(source).uri;
+    } on ArgumentError {
+      return _buildUnavailable(
+        'This image is not declared by the loaded Bible Pedia artifact.',
+      );
+    }
+    return switch (uri.scheme.toLowerCase()) {
+      'asset' => Image.asset(
+        uri.path.startsWith('/') ? uri.path.substring(1) : uri.path,
         key: const Key('bible_pedia_image_media'),
         width: double.infinity,
         fit: BoxFit.contain,
@@ -84,8 +101,10 @@ class BiblePediaImageFigure extends StatelessWidget {
         excludeFromSemantics: image.altText.isEmpty,
         errorBuilder: _buildLoadError,
       ),
-      RemoteImageSource() => _buildRemoteImage(source),
-      DataImageSource() => _buildDataImage(source),
+      'https' => _buildNetworkImage(uri),
+      _ => _buildUnavailable(
+        'This image resource origin is not available on this device.',
+      ),
     };
   }
 
@@ -94,8 +113,12 @@ class BiblePediaImageFigure extends StatelessWidget {
         source.uri.userInfo.isNotEmpty) {
       return _buildUnavailable('Only secure remote images can be displayed.');
     }
+    return _buildNetworkImage(source.uri);
+  }
+
+  Widget _buildNetworkImage(Uri uri) {
     return Image.network(
-      source.uri.toString(),
+      uri.toString(),
       key: const Key('bible_pedia_image_media'),
       width: double.infinity,
       fit: BoxFit.contain,

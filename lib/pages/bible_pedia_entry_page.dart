@@ -2,7 +2,9 @@ import 'package:bible_io/bible_io.dart';
 import 'package:bible_pedia_dart/bible_pedia.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../widgets/bible_pedia_document.dart';
 import '../widgets/bible_pedia_image.dart';
 
 typedef BiblePediaCitationSelected =
@@ -13,7 +15,7 @@ class BiblePediaEntryPage extends StatelessWidget {
   const BiblePediaEntryPage({
     super.key,
     required this.entry,
-    required this.dataset,
+    required this.artifact,
     required this.onEntryOpened,
     this.onCitationSelected,
   });
@@ -21,9 +23,11 @@ class BiblePediaEntryPage extends StatelessWidget {
   static const double _maxContentWidth = 760;
 
   final EncyclopediaEntry entry;
-  final BiblePediaDataset dataset;
+  final BiblePediaArtifact artifact;
   final ValueChanged<EncyclopediaEntry> onEntryOpened;
   final BiblePediaCitationSelected? onCitationSelected;
+
+  BiblePediaDataset get dataset => artifact.dataset;
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +70,7 @@ class BiblePediaEntryPage extends StatelessWidget {
                             _buildImagesSection(),
                           ],
                           const SizedBox(height: 20),
-                          _buildDescriptionSection(),
+                          _buildDescriptionSection(context),
                           const SizedBox(height: 16),
                           _buildReferencesSection(),
                           const SizedBox(height: 16),
@@ -99,6 +103,7 @@ class BiblePediaEntryPage extends StatelessWidget {
             BiblePediaImageFigure(
               key: ValueKey('bible_pedia_image_$index'),
               image: images[index],
+              artifact: artifact,
             ),
             if (index != images.length - 1) ...[
               const SizedBox(height: 16),
@@ -111,7 +116,7 @@ class BiblePediaEntryPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDescriptionSection() {
+  Widget _buildDescriptionSection(BuildContext context) {
     final description = entry.descriptionMarkdown.trim();
     return _EntrySection(
       key: const Key('bible_pedia_entry_description_section'),
@@ -122,9 +127,10 @@ class BiblePediaEntryPage extends StatelessWidget {
               key: Key('bible_pedia_entry_description_empty'),
               message: 'No description is available for this entry yet.',
             )
-          : _LightweightMarkdown(
+          : BiblePediaDocumentView(
               key: const Key('bible_pedia_entry_description'),
-              data: description,
+              document: BiblePediaMarkdown.parse(description),
+              onLinkSelected: (link) => _openDescriptionLink(context, link),
             ),
     );
   }
@@ -199,9 +205,16 @@ class BiblePediaEntryPage extends StatelessWidget {
     final relatedEntry = relationship.relatedEntry;
     final isIncoming =
         relationship.direction == EntryRelationshipDirection.incoming;
+    final kindDescriptor = relationship.kind == null
+        ? null
+        : dataset.relationshipKindById(relationship.kind!);
     final details = <String>[
-      if (isIncoming) 'Mentioned by',
-      if (relationship.kind != null) relationship.kind!,
+      if (kindDescriptor != null)
+        kindDescriptor.labelForDirection(relationship.direction)
+      else if (isIncoming)
+        'Mentioned by',
+      if (kindDescriptor == null && relationship.kind != null)
+        relationship.kind!,
       if (isIncoming) 'Link text: ${relationship.label}',
       if (!isIncoming && relationship.label != relatedEntry.title)
         relationship.label,
@@ -250,12 +263,54 @@ class BiblePediaEntryPage extends StatelessWidget {
         settings: RouteSettings(name: '/bible-pedia/entry/${relatedEntry.id}'),
         builder: (context) => BiblePediaEntryPage(
           entry: relatedEntry,
-          dataset: dataset,
+          artifact: artifact,
           onEntryOpened: onEntryOpened,
           onCitationSelected: onCitationSelected,
         ),
       ),
     );
+  }
+
+  void _openDescriptionLink(BuildContext context, MarkdownLink link) {
+    final entryUri = link.entryUri;
+    if (entryUri != null) {
+      final resolution = entryUri.resolve(dataset);
+      final target = resolution.entry;
+      if (target != null) {
+        if (target.id != entry.id) _openRelatedEntry(context, target);
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This Bible Pedia entry is unavailable.')),
+      );
+      return;
+    }
+
+    final uri = link.uri;
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This link cannot be opened safely.')),
+      );
+      return;
+    }
+    _launchExternalLink(context, uri);
+  }
+
+  Future<void> _launchExternalLink(BuildContext context, Uri uri) async {
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } on Exception {
+      opened = false;
+    }
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open this link.')),
+      );
+    }
   }
 
   Widget _buildTagsSection() {
@@ -665,193 +720,6 @@ class _EmptySectionMessage extends StatelessWidget {
       ),
     );
   }
-}
-
-class _LightweightMarkdown extends StatelessWidget {
-  const _LightweightMarkdown({super.key, required this.data});
-
-  final String data;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final blocks = <Widget>[];
-    final paragraphLines = <String>[];
-
-    void flushParagraph() {
-      if (paragraphLines.isEmpty) return;
-      blocks.add(
-        Text(
-          _cleanInlineMarkdown(paragraphLines.join(' ')),
-          style: theme.textTheme.bodyLarge?.copyWith(height: 1.55),
-        ),
-      );
-      paragraphLines.clear();
-    }
-
-    final lines = data
-        .replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n')
-        .split('\n');
-    for (final rawLine in lines) {
-      final line = rawLine.trim();
-      if (line.isEmpty) {
-        flushParagraph();
-        continue;
-      }
-
-      final heading = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(line);
-      if (heading != null) {
-        flushParagraph();
-        final level = heading.group(1)!.length;
-        final style = switch (level) {
-          1 => theme.textTheme.titleLarge,
-          2 => theme.textTheme.titleMedium,
-          _ => theme.textTheme.titleSmall,
-        };
-        blocks.add(
-          Text(
-            _cleanInlineMarkdown(heading.group(2)!),
-            style: style?.copyWith(fontWeight: FontWeight.w700, height: 1.3),
-          ),
-        );
-        continue;
-      }
-
-      final unorderedItem = RegExp(r'^[-+*]\s+(.+)$').firstMatch(line);
-      if (unorderedItem != null) {
-        flushParagraph();
-        blocks.add(
-          _MarkdownListItem(
-            marker: '\u2022',
-            text: _cleanInlineMarkdown(unorderedItem.group(1)!),
-          ),
-        );
-        continue;
-      }
-
-      final orderedItem = RegExp(r'^(\d+)[.)]\s+(.+)$').firstMatch(line);
-      if (orderedItem != null) {
-        flushParagraph();
-        blocks.add(
-          _MarkdownListItem(
-            marker: '${orderedItem.group(1)}.',
-            text: _cleanInlineMarkdown(orderedItem.group(2)!),
-          ),
-        );
-        continue;
-      }
-
-      final quote = RegExp(r'^>\s?(.*)$').firstMatch(line);
-      if (quote != null) {
-        flushParagraph();
-        blocks.add(
-          Container(
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHigh,
-              border: BorderDirectional(
-                start: BorderSide(color: colors.primary, width: 3),
-              ),
-            ),
-            padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 12, 10),
-            child: Text(
-              _cleanInlineMarkdown(quote.group(1)!),
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: colors.onSurfaceVariant,
-                fontStyle: FontStyle.italic,
-                height: 1.5,
-              ),
-            ),
-          ),
-        );
-        continue;
-      }
-
-      if (RegExp(r'^([-*_])\1{2,}$').hasMatch(line)) {
-        flushParagraph();
-        blocks.add(const Divider());
-        continue;
-      }
-
-      paragraphLines.add(line);
-    }
-    flushParagraph();
-
-    return SelectionArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var index = 0; index < blocks.length; index++) ...[
-            blocks[index],
-            if (index != blocks.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _MarkdownListItem extends StatelessWidget {
-  const _MarkdownListItem({required this.marker, required this.text});
-
-  final String marker;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.5);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 28,
-          child: Text(
-            marker,
-            style: style?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ),
-        Expanded(child: Text(text, style: style)),
-      ],
-    );
-  }
-}
-
-String _cleanInlineMarkdown(String source) {
-  var result = source;
-  result = result.replaceAllMapped(
-    RegExp(r'!\[([^\]]*)\]\([^)]*\)'),
-    (match) => match.group(1)!.trim(),
-  );
-  result = result.replaceAllMapped(
-    RegExp(r'\[([^\]]+)\]\([^)]*\)'),
-    (match) => match.group(1)!,
-  );
-  result = result.replaceAllMapped(
-    RegExp(r'\[\[([^\]|]+)(?:\|([^\]]+))?\]\]'),
-    (match) => match.group(2) ?? match.group(1)!,
-  );
-  result = result.replaceAll(RegExp(r'<[^>]+>'), '');
-  result = result.replaceAll('**', '');
-  result = result.replaceAll('__', '');
-  result = result.replaceAll('~~', '');
-  result = result.replaceAll('`', '');
-  result = result.replaceAllMapped(
-    RegExp(r'\*([^*\n]+)\*'),
-    (match) => match.group(1)!,
-  );
-  result = result.replaceAllMapped(
-    RegExp(r'_([^_\n]+)_'),
-    (match) => match.group(1)!,
-  );
-  result = result
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"')
-      .replaceAll('&#39;', "'");
-  return result.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 IconData _categoryIcon(EntryType type) => switch (type) {

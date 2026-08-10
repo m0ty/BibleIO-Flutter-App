@@ -33,12 +33,13 @@ void main() {
       contentVersion: 'image-test',
       entries: [entry],
     );
+    final artifact = _artifactFor(dataset);
 
     await tester.pumpWidget(
       MaterialApp(
         home: BiblePediaEntryPage(
           entry: entry,
-          dataset: dataset,
+          artifact: artifact,
           onEntryOpened: (_) {},
         ),
       ),
@@ -64,16 +65,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('local image stays inside the verified runtime asset root', (
+  testWidgets('local image resolves against the artifact asset root', (
     tester,
   ) async {
+    final image = EncyclopediaImage(
+      source: r'images\people\paul.png',
+      altText: 'Paul',
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: BiblePediaImageFigure(
-            image: EncyclopediaImage(
-              source: r'images\people\paul.png',
-              altText: 'Paul',
+            image: image,
+            artifact: _artifactForImage(
+              image,
+              resourceRoot: BiblePediaResourceRoot.asset(
+                'assets/translations/en/pedia',
+              ),
             ),
           ),
         ),
@@ -87,7 +95,7 @@ void main() {
     expect(provider, isA<AssetImage>());
     expect(
       (provider as AssetImage).assetName,
-      'assets/bible_pedia/images/people/paul.png',
+      'assets/translations/en/pedia/images/people/paul.png',
     );
     // The test bundle does not contain this generated asset. The production
     // errorBuilder must contain a missing/corrupt asset without escaping the
@@ -95,6 +103,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('bible_pedia_image_unavailable')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('undeclared local image is refused', (tester) async {
+    final image = EncyclopediaImage(
+      source: 'images/people/paul.png',
+      altText: 'Paul',
+    );
+    final dataset = BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'image-test',
+      entries: const [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BiblePediaImageFigure(
+            image: image,
+            artifact: _artifactFor(dataset),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Image), findsNothing);
+    expect(
+      find.text(
+        'This image is not declared by the loaded Bible Pedia artifact.',
+      ),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -121,6 +161,32 @@ void main() {
       find.byKey(const Key('bible_pedia_image_unavailable')),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('local source can resolve against an HTTPS artifact root', (
+    tester,
+  ) async {
+    await _pumpFigure(
+      tester,
+      EncyclopediaImage(source: 'images/paul.png', altText: 'Paul'),
+      artifact: _artifactForImage(
+        EncyclopediaImage(source: 'images/paul.png', altText: 'Paul'),
+        resourceRoot: BiblePediaResourceRoot.parse(
+          'https://cdn.example.test/datasets/en/',
+        ),
+      ),
+    );
+
+    final provider = tester
+        .widget<Image>(find.byKey(const Key('bible_pedia_image_media')))
+        .image;
+    expect(provider, isA<NetworkImage>());
+    expect(
+      (provider as NetworkImage).url,
+      'https://cdn.example.test/datasets/en/images/paul.png',
+    );
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
@@ -187,16 +253,58 @@ Future<void> _pumpFigure(
   WidgetTester tester,
   EncyclopediaImage image, {
   int maxInlineImageBytes = BiblePediaImageFigure.defaultMaxInlineImageBytes,
+  BiblePediaArtifact? artifact,
 }) => tester.pumpWidget(
   MaterialApp(
     home: Scaffold(
       body: BiblePediaImageFigure(
         image: image,
+        artifact: artifact ?? _artifactForImage(image),
         maxInlineImageBytes: maxInlineImageBytes,
       ),
     ),
   ),
 );
+
+BiblePediaArtifact _artifactFor(
+  BiblePediaDataset dataset, {
+  BiblePediaResourceRoot? resourceRoot,
+}) => BiblePediaArtifact(
+  dataset: dataset,
+  manifest: BiblePediaManifest.forDataset(
+    dataset,
+    files: [
+      for (final entry in dataset.entries)
+        for (final image in entry.images)
+          if (image.imageSource case final LocalImageSource source)
+            BiblePediaManifestFile(path: source.portablePath),
+    ],
+  ),
+  resourceRoot:
+      resourceRoot ?? BiblePediaResourceRoot.asset('assets/bible_pedia'),
+);
+
+BiblePediaArtifact _artifactForImage(
+  EncyclopediaImage image, {
+  BiblePediaResourceRoot? resourceRoot,
+}) {
+  final entry = EncyclopediaEntry(
+    id: 'person/image-test',
+    title: 'Image test',
+    type: EntryType.person,
+    descriptionMarkdown: 'Image fixture.',
+    images: [image],
+    sourcePath: 'person/image-test.md',
+  );
+  return _artifactFor(
+    BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'image-test',
+      entries: [entry],
+    ),
+    resourceRoot: resourceRoot,
+  );
+}
 
 String _decodeSingleQuotedYaml(String source) {
   expect(source, startsWith("'"));
