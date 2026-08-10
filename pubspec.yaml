@@ -38,7 +38,7 @@ dependencies:
   bible_pedia_dart:
     git:
       url: https://github.com/m0ty/bible-io-pedia-dart.git
-      ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
+      ref: 60872eedc4bfa5267b7325a3a85015caf709a4fe
   package_info_plus: ^10.2.1
   shared_preferences: ^2.2.0
 
@@ -67,7 +67,11 @@ flutter:
   assets:
     - LICENSE
     - assets/app_icon.png
-    - assets/bible_pedia/
+    # BEGIN GENERATED BIBLE PEDIA RUNTIME ASSETS
+    - 'assets/bible_pedia/.bible-pedia-runtime'
+    - 'assets/bible_pedia/encyclopedia.bundle.json'
+    - 'assets/bible_pedia/runtime.manifest.json'
+    # END GENERATED BIBLE PEDIA RUNTIME ASSETS
     - bible_io_json/bible_list.json
     - bible_io_json/Arabic/
     - bible_io_json/Chinese/

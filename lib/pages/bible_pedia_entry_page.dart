@@ -3,12 +3,17 @@ import 'package:bible_pedia_dart/bible_pedia.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/bible_pedia_image.dart';
+
+typedef BiblePediaCitationSelected =
+    void Function(BibleCitation citation, BibleBookEnum book);
+
 /// Displays one Bible Pedia entry and its structured relationships.
 class BiblePediaEntryPage extends StatelessWidget {
   const BiblePediaEntryPage({
     super.key,
     required this.entry,
-    required this.encyclopedia,
+    required this.dataset,
     required this.onEntryOpened,
     this.onCitationSelected,
   });
@@ -16,9 +21,9 @@ class BiblePediaEntryPage extends StatelessWidget {
   static const double _maxContentWidth = 760;
 
   final EncyclopediaEntry entry;
-  final BibleEncyclopedia encyclopedia;
+  final BiblePediaDataset dataset;
   final ValueChanged<EncyclopediaEntry> onEntryOpened;
-  final ValueChanged<BibleCitation>? onCitationSelected;
+  final BiblePediaCitationSelected? onCitationSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +61,10 @@ class BiblePediaEntryPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _EntryHeader(entry: entry),
+                          if (entry.images.isNotEmpty) ...[
+                            const SizedBox(height: 20),
+                            _buildImagesSection(),
+                          ],
                           const SizedBox(height: 20),
                           _buildDescriptionSection(),
                           const SizedBox(height: 16),
@@ -73,6 +82,31 @@ class BiblePediaEntryPage extends StatelessWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImagesSection() {
+    final images = entry.images;
+    return _EntrySection(
+      key: const Key('bible_pedia_entry_images_section'),
+      icon: Icons.photo_library_outlined,
+      title: images.length == 1 ? 'Image' : 'Images',
+      count: images.length,
+      child: Column(
+        children: [
+          for (var index = 0; index < images.length; index++) ...[
+            BiblePediaImageFigure(
+              key: ValueKey('bible_pedia_image_$index'),
+              image: images[index],
+            ),
+            if (index != images.length - 1) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+            ],
+          ],
+        ],
       ),
     );
   }
@@ -115,68 +149,96 @@ class BiblePediaEntryPage extends StatelessWidget {
   }
 
   Widget _buildRelatedEntriesSection(BuildContext context) {
-    final links = entry.relatedEntries;
+    final relationships = dataset.relationshipsOf(entry.id);
+    final unresolvedLinks = entry.relatedEntries
+        .where(
+          (link) =>
+              link.entryId == null ||
+              !dataset.resolveEntry(link.entryId!).isResolved,
+        )
+        .toList(growable: false);
+    final relationshipCount = relationships.length + unresolvedLinks.length;
     return _EntrySection(
       key: const Key('bible_pedia_entry_related_section'),
       icon: Icons.hub_outlined,
       title: 'Related entries',
-      count: links.length,
-      child: links.isEmpty
+      count: relationshipCount,
+      child: relationshipCount == 0
           ? const _EmptySectionMessage(
               key: Key('bible_pedia_entry_related_empty'),
               message: 'No related entries are listed.',
             )
           : Column(
               children: [
-                for (var index = 0; index < links.length; index++) ...[
-                  _buildRelatedEntryTile(context, links[index], index),
-                  if (index != links.length - 1) const Divider(indent: 48),
+                for (var index = 0; index < relationships.length; index++) ...[
+                  _buildRelationshipTile(context, relationships[index], index),
+                  if (index != relationshipCount - 1) const Divider(indent: 48),
+                ],
+                for (
+                  var index = 0;
+                  index < unresolvedLinks.length;
+                  index++
+                ) ...[
+                  _buildUnresolvedLinkTile(
+                    unresolvedLinks[index],
+                    relationships.length + index,
+                  ),
+                  if (relationships.length + index != relationshipCount - 1)
+                    const Divider(indent: 48),
                 ],
               ],
             ),
     );
   }
 
-  Widget _buildRelatedEntryTile(
+  Widget _buildRelationshipTile(
     BuildContext context,
-    EntryLink link,
+    EntryRelationship relationship,
     int index,
   ) {
-    final relatedEntry = link.entryId == null
-        ? null
-        : encyclopedia.entryById(link.entryId!);
-    final title = relatedEntry?.title ?? link.label;
-    final semanticsLabel = relatedEntry == null
-        ? '$title. Related entry unavailable.'
-        : '$title. ${_categoryLabel(relatedEntry.type)}.';
+    final relatedEntry = relationship.relatedEntry;
+    final isIncoming =
+        relationship.direction == EntryRelationshipDirection.incoming;
+    final details = <String>[
+      if (isIncoming) 'Mentioned by',
+      if (relationship.kind != null) relationship.kind!,
+      if (isIncoming) 'Link text: ${relationship.label}',
+      if (!isIncoming && relationship.label != relatedEntry.title)
+        relationship.label,
+      _categoryLabel(relatedEntry.type),
+    ];
+    final semanticsLabel = '${relatedEntry.title}. ${details.join('. ')}.';
 
     return Semantics(
-      button: relatedEntry != null,
-      enabled: relatedEntry != null,
+      button: true,
+      enabled: true,
       label: semanticsLabel,
+      excludeSemantics: true,
+      child: ListTile(
+        key: ValueKey('bible_pedia_related_${relatedEntry.id}_$index'),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+        leading: Icon(_categoryIcon(relatedEntry.type)),
+        title: Text(relatedEntry.title),
+        subtitle: Text(details.join(' • ')),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => _openRelatedEntry(context, relatedEntry),
+      ),
+    );
+  }
+
+  Widget _buildUnresolvedLinkTile(EntryLink link, int index) {
+    return Semantics(
+      enabled: false,
+      label: '${link.label}. Related entry unavailable.',
       excludeSemantics: true,
       child: ListTile(
         key: ValueKey(
           'bible_pedia_related_${link.entryId ?? link.target}_$index',
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-        leading: Icon(
-          relatedEntry == null
-              ? Icons.link_off_rounded
-              : _categoryIcon(relatedEntry.type),
-        ),
-        title: Text(title),
-        subtitle: Text(
-          relatedEntry == null
-              ? 'This entry is not available.'
-              : _categoryLabel(relatedEntry.type),
-        ),
-        trailing: relatedEntry == null
-            ? null
-            : const Icon(Icons.chevron_right_rounded),
-        onTap: relatedEntry == null
-            ? null
-            : () => _openRelatedEntry(context, relatedEntry),
+        leading: const Icon(Icons.link_off_rounded),
+        title: Text(link.label),
+        subtitle: const Text('This entry is not available.'),
       ),
     );
   }
@@ -188,7 +250,7 @@ class BiblePediaEntryPage extends StatelessWidget {
         settings: RouteSettings(name: '/bible-pedia/entry/${relatedEntry.id}'),
         builder: (context) => BiblePediaEntryPage(
           entry: relatedEntry,
-          encyclopedia: encyclopedia,
+          dataset: dataset,
           onEntryOpened: onEntryOpened,
           onCitationSelected: onCitationSelected,
         ),
@@ -410,7 +472,7 @@ class _ReferenceBookList extends StatelessWidget {
   });
 
   final List<BibleCitation> references;
-  final ValueChanged<BibleCitation>? onCitationSelected;
+  final BiblePediaCitationSelected? onCitationSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -477,7 +539,7 @@ class _ReferenceList extends StatefulWidget {
 
   final BibleBookEnum book;
   final List<BibleCitation> references;
-  final ValueChanged<BibleCitation>? onCitationSelected;
+  final BiblePediaCitationSelected? onCitationSelected;
 
   @override
   State<_ReferenceList> createState() => _ReferenceListState();
@@ -517,7 +579,10 @@ class _ReferenceListState extends State<_ReferenceList> {
             citation: widget.references[index],
             onTap: widget.onCitationSelected == null
                 ? null
-                : () => widget.onCitationSelected!(widget.references[index]),
+                : () => widget.onCitationSelected!(
+                    widget.references[index],
+                    widget.book,
+                  ),
           ),
           if (index != _visibleCount - 1 || remaining > 0)
             const Divider(indent: 48),

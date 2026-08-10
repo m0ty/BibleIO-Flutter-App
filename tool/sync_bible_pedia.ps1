@@ -21,6 +21,9 @@ $destinationDirectory = [System.IO.Path]::GetFullPath(
 $destinationPath = [System.IO.Path]::GetFullPath(
     (Join-Path $destinationDirectory 'encyclopedia.bundle.json')
 )
+$pubspecPath = [System.IO.Path]::GetFullPath((Join-Path $appRoot 'pubspec.yaml'))
+$assetBlockStart = '    # BEGIN GENERATED BIBLE PEDIA RUNTIME ASSETS'
+$assetBlockEnd = '    # END GENERATED BIBLE PEDIA RUNTIME ASSETS'
 $assetsPrefix = $assetsRoot.TrimEnd(
     [System.IO.Path]::DirectorySeparatorChar,
     [System.IO.Path]::AltDirectorySeparatorChar
@@ -46,19 +49,6 @@ $resolvedSource = [System.IO.Path]::GetFullPath(
 if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) {
     throw "Bible Pedia bundle was not found: $resolvedSource"
 }
-$sourceImagesDirectory = Join-Path $sourceDirectory 'images'
-if (Test-Path -LiteralPath $sourceImagesDirectory -PathType Container) {
-    $sourceImage = Get-ChildItem `
-        -LiteralPath $sourceImagesDirectory `
-        -Recurse `
-        -File | Select-Object -First 1
-    if ($null -ne $sourceImage) {
-        throw (
-            'Bible Pedia images are not yet supported by this app asset layout. ' +
-            'Add image rendering and explicit Flutter asset declarations before syncing.'
-        )
-    }
-}
 if ([string]::Equals(
     $resolvedSource,
     $destinationPath,
@@ -69,6 +59,9 @@ if ([string]::Equals(
 
 if (-not (Test-Path -LiteralPath $assetsRoot -PathType Container)) {
     throw "The app assets directory does not exist: $assetsRoot"
+}
+if (-not (Test-Path -LiteralPath $pubspecPath -PathType Leaf)) {
+    throw "The Flutter pubspec was not found: $pubspecPath"
 }
 
 foreach ($directory in @($assetsRoot, $destinationDirectory)) {
@@ -89,6 +82,37 @@ if (Test-Path -LiteralPath $destinationPath) {
     ) {
         throw "Refusing to replace a symbolic link: $destinationPath"
     }
+}
+
+$pubspecItem = Get-Item -LiteralPath $pubspecPath -Force
+if (
+    ($pubspecItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+) {
+    throw "Refusing to replace a symbolic link: $pubspecPath"
+}
+
+$pubspecText = [System.IO.File]::ReadAllText($pubspecPath)
+$assetBlockStartIndex = $pubspecText.IndexOf(
+    $assetBlockStart,
+    [System.StringComparison]::Ordinal
+)
+if ($assetBlockStartIndex -lt 0) {
+    throw "The generated Bible Pedia asset block is missing from $pubspecPath"
+}
+if ($pubspecText.IndexOf(
+    $assetBlockStart,
+    $assetBlockStartIndex + $assetBlockStart.Length,
+    [System.StringComparison]::Ordinal
+) -ge 0) {
+    throw "The generated Bible Pedia asset block appears more than once in $pubspecPath"
+}
+$assetBlockEndIndex = $pubspecText.IndexOf(
+    $assetBlockEnd,
+    $assetBlockStartIndex + $assetBlockStart.Length,
+    [System.StringComparison]::Ordinal
+)
+if ($assetBlockEndIndex -lt 0) {
+    throw "The generated Bible Pedia asset block is incomplete in $pubspecPath"
 }
 
 $dartCommand = Get-Command $DartExecutable -ErrorAction SilentlyContinue
@@ -126,6 +150,61 @@ finally {
     Pop-Location
 }
 
+$appPrefix = $appRoot.TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar,
+    [System.IO.Path]::AltDirectorySeparatorChar
+) + [System.IO.Path]::DirectorySeparatorChar
+$runtimeAssetPaths = @(
+    foreach ($runtimeFile in Get-ChildItem `
+        -LiteralPath $destinationDirectory `
+        -Recurse `
+        -Force `
+        -File) {
+        if (
+            ($runtimeFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+        ) {
+            throw "Refusing to declare a symbolic link as an asset: $($runtimeFile.FullName)"
+        }
+        $runtimePath = [System.IO.Path]::GetFullPath($runtimeFile.FullName)
+        if (-not $runtimePath.StartsWith(
+            $appPrefix,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw "Refusing to declare an asset outside the app directory: $runtimePath"
+        }
+        $runtimePath.Substring($appPrefix.Length).Replace('\', '/')
+    }
+) | Sort-Object -Unique
+
+if ($runtimeAssetPaths.Count -eq 0) {
+    throw "The Bible Pedia runtime artifact contains no files: $destinationDirectory"
+}
+
+$lineEnding = if ($pubspecText.Contains("`r`n")) { "`r`n" } else { "`n" }
+$generatedAssetLines = @($assetBlockStart)
+foreach ($runtimeAssetPath in $runtimeAssetPaths) {
+    $escapedAssetPath = $runtimeAssetPath.Replace("'", "''")
+    $generatedAssetLines += "    - '$escapedAssetPath'"
+}
+$generatedAssetLines += $assetBlockEnd
+$generatedAssetBlock = $generatedAssetLines -join $lineEnding
+$assetBlockEndOffset = $assetBlockEndIndex + $assetBlockEnd.Length
+$updatedPubspec = $pubspecText.Substring(0, $assetBlockStartIndex) +
+    $generatedAssetBlock +
+    $pubspecText.Substring($assetBlockEndOffset)
+if (-not [string]::Equals(
+    $pubspecText,
+    $updatedPubspec,
+    [System.StringComparison]::Ordinal
+)) {
+    $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText(
+        $pubspecPath,
+        $updatedPubspec,
+        $utf8WithoutBom
+    )
+}
+
 $syncedBundle = Get-Item -LiteralPath $destinationPath
 $destinationHash = (
     Get-FileHash -LiteralPath $destinationPath -Algorithm SHA256
@@ -136,3 +215,4 @@ Write-Output "Source data: $sourceDirectory"
 Write-Output "Destination: $destinationDirectory"
 Write-Output ('Bundle size: {0:N0} bytes ({1:N2} MiB)' -f $syncedBundle.Length, $sizeMiB)
 Write-Output "Bundle hash: $destinationHash"
+Write-Output "Declared runtime assets: $($runtimeAssetPaths.Count)"

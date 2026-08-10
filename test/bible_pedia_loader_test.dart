@@ -9,65 +9,70 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(resetBiblePediaBundleCache);
+  setUp(resetBiblePediaDatasetCache);
 
   test('loads the app asset and validates its bundle metadata', () async {
     final assetBundle = _TestAssetBundle(_validBundleJson);
 
-    final bundle = await loadBiblePediaBundle(assetBundle: assetBundle);
+    final dataset = await loadBiblePediaDataset(assetBundle: assetBundle);
 
     expect(assetBundle.requestedKeys, [biblePediaBundleAssetKey]);
-    expect(bundle.schemaVersion, 1);
-    expect(bundle.languageCode, 'en');
-    expect(bundle.contentVersion, 'test-1');
-    expect(bundle.entries, isEmpty);
+    expect(dataset.schemaVersion, 1);
+    expect(dataset.languageCode, 'en');
+    expect(dataset.contentVersion, 'test-1');
+    expect(dataset.entries, isEmpty);
   });
 
-  test(
-    'bundled runtime asset contains the reviewed package snapshot',
-    () async {
-      final bundle = await loadBiblePediaBundle();
+  test('bundled runtime asset contains the reviewed package snapshot', () async {
+    final dataset = await loadBiblePediaDataset();
 
-      expect(bundle.datasetId, 'bible-pedia');
-      expect(bundle.languageCode, 'en');
-      expect(bundle.contentVersion, '1.0.0');
-      expect(bundle.length, 328);
-      expect(bundle.categories.map((category) => category.label), [
-        'People',
-        'Locations',
-        'Events',
-        'Concepts',
-        'Other',
-      ]);
-      expect(bundle.encyclopedia.categoryCounts, {
-        'person': 197,
-        'location': 63,
-        'event': 8,
-        'concept': 60,
-      });
-      expect(
-        bundle.coverageStatus(BibleBookEnum.matthew, 1),
-        CoverageStatus.covered,
-      );
-      expect(
-        bundle.coverageStatus(BibleBookEnum.acts, 1),
-        CoverageStatus.notCovered,
-      );
-      expect(bundle.provenance.generatorVersion, '0.1.0');
-      expect(bundle.rights.license, 'AGPL-3.0-only');
-      expect(bundle.rights.attribution, 'Bible Pedia Dart contributors');
-      expect(
-        bundle.encyclopedia.entryById('concept/crucifiction')?.title,
-        'Crucifixion',
-      );
-    },
-  );
+    expect(dataset.datasetId, 'bible-pedia');
+    expect(dataset.languageCode, 'en');
+    expect(dataset.contentVersion, '1.0.0');
+    expect(dataset.length, 328);
+    expect(dataset.categories.map((category) => category.label), [
+      'People',
+      'Locations',
+      'Events',
+      'Concepts',
+      'Other',
+    ]);
+    expect(dataset.categoryCounts, {
+      'person': 197,
+      'location': 63,
+      'event': 8,
+      'concept': 60,
+    });
+    expect(
+      dataset.coverageStatus(BibleBookEnum.matthew, 1),
+      CoverageStatus.covered,
+    );
+    expect(
+      dataset.coverageStatus(BibleBookEnum.acts, 1),
+      CoverageStatus.notCovered,
+    );
+    expect(dataset.provenance.generatorVersion, '0.1.0');
+    expect(
+      dataset.provenance.generatorRevision,
+      'a29da7b7a7e834ed9a293805dbc21d6a1a87fd96',
+    );
+    expect(
+      dataset.provenance.sourceRevision,
+      'sha256-tree:4b33075f9cf67fdec1995434e93f660431cc8aa618d07f89ac14328b39df6cec',
+    );
+    expect(dataset.rights.license, 'AGPL-3.0-only');
+    expect(dataset.rights.attribution, 'Bible Pedia Dart contributors');
+    expect(
+      dataset.resolveEntry('concept/crucifiction').entry?.title,
+      'Crucifixion',
+    );
+  });
 
   test('does not cache loads from an injected asset bundle', () async {
     final assetBundle = _TestAssetBundle(_validBundleJson);
 
-    await loadBiblePediaBundle(assetBundle: assetBundle);
-    await loadBiblePediaBundle(assetBundle: assetBundle);
+    await loadBiblePediaDataset(assetBundle: assetBundle);
+    await loadBiblePediaDataset(assetBundle: assetBundle);
 
     expect(assetBundle.requestedKeys, [
       biblePediaBundleAssetKey,
@@ -86,7 +91,7 @@ void main() {
     );
 
     await expectLater(
-      loadBiblePediaBundle(assetBundle: assetBundle),
+      loadBiblePediaDataset(assetBundle: assetBundle),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,

@@ -166,6 +166,34 @@ void main() {
     expect(descriptionMatch, findsNothing);
   });
 
+  testWidgets('uses the package Markdown contract for entry summaries', (
+    WidgetTester tester,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final markdownDataset = BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'markdown-summary-test',
+      entries: [
+        _entry(
+          id: 'concept/summary',
+          title: 'Summary',
+          type: EntryType.concept,
+          description:
+              '# Heading\nRead [Damascus](entry://location/damascus) and `code_*`.',
+        ),
+      ],
+    );
+
+    await _pumpPediaPage(
+      tester,
+      bundle: markdownDataset,
+      preferences: preferences,
+    );
+
+    expect(find.text('Heading Read Damascus and code_*.'), findsOneWidget);
+    expect(find.textContaining('entry://'), findsNothing);
+  });
+
   testWidgets('groups Moses references by book and expands independently', (
     WidgetTester tester,
   ) async {
@@ -548,6 +576,10 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const Key('bible_pedia_recent_empty')), findsNothing);
+    expect(preferences.getStringList(BiblePediaHistory.preferenceKey), [
+      'concept/grace',
+      'person/paul',
+    ]);
   });
 
   testWidgets('Recent resolves legacy IDs without duplicate entries', (
@@ -571,12 +603,28 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(preferences.getStringList(BiblePediaHistory.preferenceKey), [
+      'person/paul',
+    ]);
   });
 
-  testWidgets('selecting a citation returns its first Bible location', (
+  testWidgets('selecting a cross-book citation opens within its book group', (
     WidgetTester tester,
   ) async {
     final preferences = await SharedPreferences.getInstance();
+    final rangeBundle = BibleEncyclopediaBundle(
+      languageCode: 'en',
+      contentVersion: 'cross-book-navigation-test',
+      entries: [
+        _entry(
+          id: 'event/gospel-range',
+          title: 'Gospel range',
+          type: EntryType.event,
+          description: 'A synthetic cross-book range.',
+          references: [BibleCitation.parse('Matthew 28:20-John 1:1')],
+        ),
+      ],
+    );
     BibleLocation? selectedLocation;
 
     await tester.pumpWidget(
@@ -592,11 +640,11 @@ void main() {
                         MaterialPageRoute<BibleLocation>(
                           builder: (context) => BiblePediaPage(
                             currentLocation: BibleLocation(
-                              book: BibleBookEnum.acts,
-                              chapter: 9,
+                              book: BibleBookEnum.matthew,
+                              chapter: 28,
                             ),
                             preferences: preferences,
-                            bundleLoader: () async => bundle,
+                            datasetLoader: () async => rangeBundle,
                           ),
                         ),
                       );
@@ -611,15 +659,15 @@ void main() {
 
     await tester.tap(find.byKey(const Key('open_bible_pedia_test_button')));
     await tester.pumpAndSettle();
-    await _searchFor(tester, 'Saul of Tarsus');
-    await _openVisibleEntry(tester, 'person/paul');
+    await _searchFor(tester, 'Gospel range');
+    await _openVisibleEntry(tester, 'event/gospel-range');
 
-    final actsGroup = find.byKey(
-      const ValueKey('bible_pedia_reference_book_acts'),
+    final markGroup = find.byKey(
+      const ValueKey('bible_pedia_reference_book_mark'),
     );
-    await tester.tap(actsGroup);
+    await tester.tap(markGroup);
     await tester.pumpAndSettle();
-    final citation = find.byKey(const ValueKey('bible_pedia_citation_acts_0'));
+    final citation = find.byKey(const ValueKey('bible_pedia_citation_mark_0'));
     await tester.ensureVisible(citation);
     await tester.tap(citation);
     await tester.pumpAndSettle();
@@ -628,8 +676,8 @@ void main() {
       find.byKey(const Key('open_bible_pedia_test_button')),
       findsOneWidget,
     );
-    expect(selectedLocation?.book, BibleBookEnum.acts);
-    expect(selectedLocation?.chapter, 9);
+    expect(selectedLocation?.book, BibleBookEnum.mark);
+    expect(selectedLocation?.chapter, 1);
     expect(selectedLocation?.verse, 1);
   });
 
@@ -656,7 +704,7 @@ void main() {
                               chapter: 9,
                             ),
                             preferences: preferences,
-                            bundleLoader: () async => bundle,
+                            datasetLoader: () async => bundle,
                           ),
                         ),
                       );
@@ -686,6 +734,12 @@ void main() {
           .data,
       'Damascus',
     );
+    expect(
+      find.text(
+        'Mentioned by • conversion-location • Link text: Damascus • Person',
+      ),
+      findsOneWidget,
+    );
 
     final actsGroup = find.byKey(
       const ValueKey('bible_pedia_reference_book_acts'),
@@ -712,18 +766,16 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     var attempts = 0;
 
-    Future<BibleEncyclopediaBundle> loader() {
+    Future<BiblePediaDataset> loader() {
       attempts++;
       if (attempts == 1) {
-        return Future<BibleEncyclopediaBundle>.error(
-          StateError('test load failure'),
-        );
+        return Future<BiblePediaDataset>.error(StateError('test load failure'));
       }
       return Future.value(bundle);
     }
 
     await tester.pumpWidget(
-      _pediaTestApp(preferences: preferences, bundleLoader: loader),
+      _pediaTestApp(preferences: preferences, datasetLoader: loader),
     );
     await tester.pumpAndSettle();
 
@@ -743,16 +795,15 @@ void main() {
   ) async {
     final preferences = await SharedPreferences.getInstance();
 
-    Future<BibleEncyclopediaBundle> loader() =>
-        Future<BibleEncyclopediaBundle>.error(
-          InvalidEncyclopediaContentException(
-            'invalid test bundle',
-            artifact: 'bundle',
-          ),
-        );
+    Future<BiblePediaDataset> loader() => Future<BiblePediaDataset>.error(
+      InvalidEncyclopediaContentException(
+        'invalid test bundle',
+        artifact: 'bundle',
+      ),
+    );
 
     await tester.pumpWidget(
-      _pediaTestApp(preferences: preferences, bundleLoader: loader),
+      _pediaTestApp(preferences: preferences, datasetLoader: loader),
     );
     await tester.pumpAndSettle();
 
@@ -886,7 +937,7 @@ Future<void> _pumpPediaPage(
   await tester.pumpWidget(
     _pediaTestApp(
       preferences: preferences,
-      bundleLoader: () async => bundle,
+      datasetLoader: () async => bundle,
       currentLocation: currentLocation,
       currentChapterLabel: currentChapterLabel,
       initialSection: initialSection,
@@ -899,7 +950,7 @@ Future<void> _pumpPediaPage(
 
 Widget _pediaTestApp({
   required SharedPreferences preferences,
-  required BiblePediaBundleLoader bundleLoader,
+  required BiblePediaDatasetLoader datasetLoader,
   BibleLocation? currentLocation,
   String? currentChapterLabel,
   BiblePediaSection initialSection = BiblePediaSection.browse,
@@ -920,7 +971,7 @@ Widget _pediaTestApp({
       currentChapterLabel: currentChapterLabel,
       initialSection: initialSection,
       preferences: preferences,
-      bundleLoader: bundleLoader,
+      datasetLoader: datasetLoader,
     ),
   );
 }
@@ -1003,6 +1054,7 @@ BibleEncyclopediaBundle _buildBundle() {
             target: 'Damascus',
             label: 'Damascus',
             entryId: 'location/damascus',
+            kind: 'conversion-location',
           ),
         ],
         tags: const ['apostle'],

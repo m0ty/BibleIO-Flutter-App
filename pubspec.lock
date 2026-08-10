@@ -37,8 +37,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
-      resolved-ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
+      ref: "60872eedc4bfa5267b7325a3a85015caf709a4fe"
+      resolved-ref: "60872eedc4bfa5267b7325a3a85015caf709a4fe"
       url: "https://github.com/m0ty/bible-io-pedia-dart.git"
     source: git
     version: "0.1.0"

@@ -9,7 +9,10 @@ import '../services/bible_pedia_history.dart';
 import '../services/bible_pedia_loader.dart';
 import 'bible_pedia_entry_page.dart';
 
-typedef BiblePediaBundleLoader = Future<BibleEncyclopediaBundle> Function();
+typedef BiblePediaDatasetLoader = Future<BiblePediaDataset> Function();
+
+@Deprecated('Use BiblePediaDatasetLoader')
+typedef BiblePediaBundleLoader = BiblePediaDatasetLoader;
 
 enum BiblePediaSection { browse, currentChapter, recent }
 
@@ -21,21 +24,22 @@ class BiblePediaPage extends StatefulWidget {
     this.currentChapterLabel,
     this.preferences,
     this.initialSection = BiblePediaSection.browse,
-    this.bundleLoader = loadBiblePediaBundle,
+    this.datasetLoader = loadBiblePediaDataset,
   });
 
   final BibleLocation? currentLocation;
   final String? currentChapterLabel;
   final SharedPreferences? preferences;
   final BiblePediaSection initialSection;
-  final BiblePediaBundleLoader bundleLoader;
+  final BiblePediaDatasetLoader datasetLoader;
 
   @override
   State<BiblePediaPage> createState() => _BiblePediaPageState();
 }
 
 class _BiblePediaPageState extends State<BiblePediaPage> {
-  late Future<BibleEncyclopediaBundle> _bundleFuture;
+  late Future<BiblePediaDataset> _datasetFuture;
+  BiblePediaDataset? _loadedDataset;
   BiblePediaHistory? _history;
   List<String> _recentIds = const [];
   final List<String> _sessionRecentIds = [];
@@ -45,7 +49,7 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
   @override
   void initState() {
     super.initState();
-    _bundleFuture = widget.bundleLoader();
+    _startDatasetLoad();
     final preferences = widget.preferences;
     if (preferences != null) {
       _history = BiblePediaHistory(preferences);
@@ -75,6 +79,7 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
           await history.record(id);
         }
       });
+      _reconcileRecentIds();
     } on Object {
       // History is an enhancement; encyclopedia browsing remains available.
     }
@@ -93,19 +98,42 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
   }
 
   void _retryLoading() {
-    setState(() {
-      _bundleFuture = widget.bundleLoader();
-    });
+    setState(_startDatasetLoad);
   }
 
-  void _openEntry(EncyclopediaEntry entry, BibleEncyclopedia encyclopedia) {
+  void _startDatasetLoad() {
+    _loadedDataset = null;
+    late final Future<BiblePediaDataset> future;
+    future = widget.datasetLoader();
+    _datasetFuture = future;
+    unawaited(
+      future.then<void>((dataset) {
+        if (!mounted || !identical(_datasetFuture, future)) return;
+        _loadedDataset = dataset;
+        _reconcileRecentIds();
+      }, onError: (Object error, StackTrace stackTrace) {}),
+    );
+  }
+
+  void _reconcileRecentIds() {
+    final dataset = _loadedDataset;
+    if (dataset == null) return;
+
+    final canonicalIds = _resolveRecentIds(dataset, _recentIds);
+    if (_sameIds(canonicalIds, _recentIds)) return;
+
+    if (mounted) setState(() => _recentIds = canonicalIds);
+    _queueHistoryWrite((history) => history.replace(canonicalIds));
+  }
+
+  void _openEntry(EncyclopediaEntry entry, BiblePediaDataset dataset) {
     _recordEntry(entry);
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         settings: RouteSettings(name: '/bible-pedia/entry/${entry.id}'),
         builder: (context) => BiblePediaEntryPage(
           entry: entry,
-          encyclopedia: encyclopedia,
+          dataset: dataset,
           onEntryOpened: _recordEntry,
           onCitationSelected: _openCitation,
         ),
@@ -141,14 +169,15 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
     }
   }
 
-  void _openCitation(BibleCitation citation) {
-    if (citation.books.isEmpty) {
+  void _openCitation(BibleCitation citation, BibleBookEnum book) {
+    final reference = citation.anchorWithin(book);
+    if (reference == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This reference cannot be opened.')),
       );
       return;
     }
-    final location = BibleLocation.fromVerseRef(citation.firstReference);
+    final location = BibleLocation.fromVerseRef(reference);
 
     final navigator = Navigator.of(context);
     final pediaRoute = ModalRoute.of(context);
@@ -184,8 +213,8 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
             ],
           ),
         ),
-        body: FutureBuilder<BibleEncyclopediaBundle>(
-          future: _bundleFuture,
+        body: FutureBuilder<BiblePediaDataset>(
+          future: _datasetFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const _PediaMessage(
@@ -218,24 +247,23 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
               );
             }
 
-            final bundle = snapshot.data!;
-            final encyclopedia = bundle.encyclopedia;
+            final dataset = snapshot.data!;
             return TabBarView(
               children: [
                 _BrowsePediaTab(
-                  bundle: bundle,
-                  onEntrySelected: (entry) => _openEntry(entry, encyclopedia),
+                  dataset: dataset,
+                  onEntrySelected: (entry) => _openEntry(entry, dataset),
                 ),
                 _ChapterPediaTab(
-                  bundle: bundle,
+                  dataset: dataset,
                   location: widget.currentLocation,
                   chapterLabel: widget.currentChapterLabel,
-                  onEntrySelected: (entry) => _openEntry(entry, encyclopedia),
+                  onEntrySelected: (entry) => _openEntry(entry, dataset),
                 ),
                 _RecentPediaTab(
-                  encyclopedia: encyclopedia,
+                  dataset: dataset,
                   recentIds: _recentIds,
-                  onEntrySelected: (entry) => _openEntry(entry, encyclopedia),
+                  onEntrySelected: (entry) => _openEntry(entry, dataset),
                   onClear: _clearHistory,
                 ),
               ],
@@ -248,9 +276,9 @@ class _BiblePediaPageState extends State<BiblePediaPage> {
 }
 
 class _BrowsePediaTab extends StatefulWidget {
-  const _BrowsePediaTab({required this.bundle, required this.onEntrySelected});
+  const _BrowsePediaTab({required this.dataset, required this.onEntrySelected});
 
-  final BibleEncyclopediaBundle bundle;
+  final BiblePediaDataset dataset;
   final ValueChanged<EncyclopediaEntry> onEntrySelected;
 
   @override
@@ -270,27 +298,28 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
 
   @override
   Widget build(BuildContext context) {
-    final encyclopedia = widget.bundle.encyclopedia;
+    final dataset = widget.dataset;
     final selectedCategoryId = _selectedCategoryId;
-    final hits = encyclopedia.searchHits(
+    final hasTextQuery = _query.trim().isNotEmpty;
+    final result = dataset.searchResult(
       EncyclopediaQuery(
         text: _query,
-        categoryIds: selectedCategoryId == null
-            ? const []
-            : [selectedCategoryId],
+        filter: EntryFilter(
+          categoryIds: selectedCategoryId == null
+              ? const []
+              : [selectedCategoryId],
+        ),
+        sort: hasTextQuery ? SearchSort.relevance : SearchSort.titleAscending,
       ),
     );
-    final entries = hits.map((hit) => hit.entry).toList(growable: false);
-    if (_query.trim().isEmpty) {
-      entries.sort(_compareEntries);
-    }
+    final entries = result.hits.map((hit) => hit.entry).toList(growable: false);
     final snippetsById = <String, String>{
-      for (final hit in hits) hit.entry.id: hit.snippet,
+      for (final hit in result.hits) hit.entry.id: hit.snippet,
     };
-    final categoryCounts = encyclopedia.categoryCounts;
+    final categoryCounts = dataset.categoryCounts;
     final selectedCategory = selectedCategoryId == null
         ? null
-        : widget.bundle.categoryById(selectedCategoryId);
+        : dataset.categoryById(selectedCategoryId);
     final hasResults = entries.isNotEmpty;
 
     return ListView.builder(
@@ -303,10 +332,7 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _BrowseHero(
-                  entryCount: encyclopedia.length,
-                  rights: widget.bundle.rights,
-                ),
+                _BrowseHero(entryCount: dataset.length, rights: dataset.rights),
                 const SizedBox(height: 18),
                 TextField(
                   key: const Key('bible_pedia_search_field'),
@@ -341,7 +367,7 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
                 const SizedBox(height: 12),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final visibleCategories = widget.bundle.categories
+                    final visibleCategories = dataset.categories
                         .where(
                           (category) => (categoryCounts[category.id] ?? 0) > 0,
                         )
@@ -392,7 +418,7 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
                       ),
                     ),
                     Text(
-                      '${entries.length}',
+                      '${result.totalCount}',
                       key: const Key('bible_pedia_result_count'),
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -430,7 +456,7 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
         return _CenteredPediaContent(
           child: _PediaEntryCard(
             entry: entry,
-            supportingText: _query.trim().isEmpty
+            supportingText: !hasTextQuery
                 ? _entrySupportingText(entry)
                 : snippetsById[entry.id] ?? _entrySupportingText(entry),
             onTap: () => widget.onEntrySelected(entry),
@@ -443,13 +469,13 @@ class _BrowsePediaTabState extends State<_BrowsePediaTab> {
 
 class _ChapterPediaTab extends StatelessWidget {
   const _ChapterPediaTab({
-    required this.bundle,
+    required this.dataset,
     required this.location,
     required this.chapterLabel,
     required this.onEntrySelected,
   });
 
-  final BibleEncyclopediaBundle bundle;
+  final BiblePediaDataset dataset;
   final BibleLocation? location;
   final String? chapterLabel;
   final ValueChanged<EncyclopediaEntry> onEntrySelected;
@@ -467,7 +493,7 @@ class _ChapterPediaTab extends StatelessWidget {
       );
     }
 
-    final results = bundle.entriesForChapter(
+    final results = dataset.entriesForChapter(
       book: currentLocation.book,
       chapter: currentLocation.chapter,
     );
@@ -525,20 +551,20 @@ class _ChapterPediaTab extends StatelessWidget {
 
 class _RecentPediaTab extends StatelessWidget {
   const _RecentPediaTab({
-    required this.encyclopedia,
+    required this.dataset,
     required this.recentIds,
     required this.onEntrySelected,
     required this.onClear,
   });
 
-  final BibleEncyclopedia encyclopedia;
+  final BiblePediaDataset dataset;
   final List<String> recentIds;
   final ValueChanged<EncyclopediaEntry> onEntrySelected;
   final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
-    final entries = _resolveRecentEntries(encyclopedia, recentIds);
+    final entries = _resolveRecentEntries(dataset, recentIds);
 
     return ListView.builder(
       key: const PageStorageKey('bible_pedia_recent_list'),
@@ -986,18 +1012,42 @@ List<String> _mergeRecent(Iterable<String> first, Iterable<String> second) {
 }
 
 List<EncyclopediaEntry> _resolveRecentEntries(
-  BibleEncyclopedia encyclopedia,
+  BiblePediaDataset dataset,
   Iterable<String> ids,
 ) {
   final entries = <EncyclopediaEntry>[];
   final canonicalIds = <String>{};
   for (final id in ids) {
-    final entry = encyclopedia.entryById(id);
+    final entry = dataset.resolveEntry(id).entry;
     if (entry != null && canonicalIds.add(entry.id)) {
       entries.add(entry);
     }
   }
   return List.unmodifiable(entries);
+}
+
+List<String> _resolveRecentIds(
+  BiblePediaDataset dataset,
+  Iterable<String> ids,
+) {
+  final canonicalIds = <String>[];
+  final seen = <String>{};
+  for (final id in ids) {
+    final canonicalId = dataset.resolveEntry(id).canonicalId;
+    if (canonicalId != null && seen.add(canonicalId)) {
+      canonicalIds.add(canonicalId);
+    }
+    if (canonicalIds.length == BiblePediaHistory.maxEntries) break;
+  }
+  return List.unmodifiable(canonicalIds);
+}
+
+bool _sameIds(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 int _compareEntries(EncyclopediaEntry left, EncyclopediaEntry right) =>
@@ -1040,7 +1090,7 @@ String _chapterEmptyMessage(CoverageStatus status) => switch (status) {
 };
 
 String _entrySupportingText(EncyclopediaEntry entry) {
-  final description = _plainText(entry.descriptionMarkdown);
+  final description = BiblePediaMarkdown.toPlainText(entry.descriptionMarkdown);
   if (description.isNotEmpty) {
     return description.length <= 180
         ? description
@@ -1050,19 +1100,6 @@ String _entrySupportingText(EncyclopediaEntry entry) {
   return references == 0
       ? _singularCategoryLabel(entry.type)
       : '$references Bible ${references == 1 ? 'reference' : 'references'}';
-}
-
-String _plainText(String markdown) {
-  var result = markdown.replaceAllMapped(
-    RegExp(r'!\[([^\]]*)\]\([^)]*\)'),
-    (match) => match.group(1) ?? '',
-  );
-  result = result.replaceAllMapped(
-    RegExp(r'\[([^\]]+)\]\([^)]*\)'),
-    (match) => match.group(1)!,
-  );
-  result = result.replaceAll(RegExp(r'[#*_`>~-]+'), ' ');
-  return result.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 IconData _categoryIcon(EntryType type) => switch (type) {

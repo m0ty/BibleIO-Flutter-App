@@ -110,12 +110,14 @@ checkouts resolve the same code:
 bible_pedia_dart:
   git:
     url: https://github.com/m0ty/bible-io-pedia-dart.git
-    ref: a29da7b7a7e834ed9a293805dbc21d6a1a87fd96
+    ref: 60872eedc4bfa5267b7325a3a85015caf709a4fe
 ```
 
-The Bible Pedia screen uses the package's ranked search, data-defined
-categories, legacy-ID redirects, and explicit chapter coverage. It provides
-three views: browse, the currently open chapter, and recently opened entries.
+The Bible Pedia screen uses the package's unified dataset API, Unicode-ranked
+search, data-defined categories, canonical legacy-ID redirects, typed incoming
+and outgoing relationships, rich image metadata, and explicit chapter
+coverage. It provides three views: browse, the currently open chapter, and
+recently opened entries.
 
 The runtime data remains an app-owned asset. With the updated package checked
 out at `../bible-io-pedia-dart`, export and verify it with:
@@ -130,10 +132,13 @@ Run it whenever the sibling's `data/` directory changes. To use another data
 checkout, pass `-DataPath C:\path\to\data`.
 
 Advance the Git `ref` before syncing data produced by newer package code. The
-code revision and runtime data should be reviewed together. The current dataset
-contains no images; the sync command intentionally fails if images appear
-because Flutter asset directories are not recursive and the app does not yet
-render encyclopedia images.
+code revision and runtime data should be reviewed together. Local encyclopedia
+images are copied and hash-verified as part of the runtime export. Because
+Flutter asset-directory declarations are not recursive, the sync command also
+regenerates the marked Bible Pedia asset list in `pubspec.yaml`; do not edit the
+contents between those generated markers by hand. Entry pages render verified
+local assets, HTTPS remote images, and bounded `data:image/*` sources together
+with available captions, credits, and licenses.
 
 To verify the checked-in artifact without regenerating it:
 

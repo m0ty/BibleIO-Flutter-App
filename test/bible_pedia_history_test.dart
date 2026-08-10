@@ -66,6 +66,21 @@ void main() {
     );
   });
 
+  test('replace normalizes canonical IDs produced by a migration', () async {
+    await history.replace([
+      ' person/paul ',
+      'person/paul',
+      '',
+      'location/damascus',
+    ]);
+
+    expect(history.read(), ['person/paul', 'location/damascus']);
+    expect(preferences.getStringList(BiblePediaHistory.preferenceKey), [
+      'person/paul',
+      'location/damascus',
+    ]);
+  });
+
   test('clear removes the versioned preference', () async {
     await history.record('person:moses');
 

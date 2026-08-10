@@ -30,7 +30,9 @@
   },
   "provenance": {
     "generatorName": "bible_pedia_dart",
-    "generatorVersion": "0.1.0"
+    "generatorVersion": "0.1.0",
+    "generatorRevision": "a29da7b7a7e834ed9a293805dbc21d6a1a87fd96",
+    "sourceRevision": "sha256-tree:4b33075f9cf67fdec1995434e93f660431cc8aa618d07f89ac14328b39df6cec"
   },
   "rights": {
     "license": "AGPL-3.0-only",
@@ -39,8 +41,8 @@
   "files": [
     {
       "path": "encyclopedia.bundle.json",
-      "sha256": "8d2a9e3142bba4de3073984e9b675e58a728150379a16868b56318b64cfac480",
-      "bytes": 643348
+      "sha256": "6c09dd765b34dde9fa8368d6ad85964d513e04059184ac9d4c337556ce6fbe7d",
+      "bytes": 643507
     }
   ]
 }

@@ -11,8 +11,9 @@ class BiblePediaHistory {
 
   /// Returns stable entry IDs in most-recent-first order.
   ///
-  /// Invalid or legacy values are normalized at the boundary so callers never
-  /// need to handle blank, duplicate, or over-capacity histories.
+  /// Blank, duplicate, and over-capacity values are normalized at this
+  /// boundary. The Bible Pedia page resolves historical IDs against the loaded
+  /// dataset and persists their canonical replacements with [replace].
   List<String> read() {
     try {
       return List.unmodifiable(
@@ -36,6 +37,15 @@ class BiblePediaHistory {
       ...read().where((id) => id != normalizedId),
     ]);
     await _preferences.setStringList(preferenceKey, updated);
+  }
+
+  /// Replaces the persisted history with already-resolved canonical IDs.
+  ///
+  /// The same normalization rules as [record] are applied so migrations can
+  /// safely discard missing IDs and collapse multiple legacy IDs that now
+  /// resolve to one entry.
+  Future<void> replace(Iterable<String> entryIds) async {
+    await _preferences.setStringList(preferenceKey, _normalize(entryIds));
   }
 
   /// Removes all persisted Bible-pedia history.
