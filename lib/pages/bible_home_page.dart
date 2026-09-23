@@ -54,7 +54,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
   BibleLoadProgress? _loadProgress;
   Object? _error;
   int _loadGeneration = 0;
-  int? _focusedVerseNumber;
+  String? _focusedVerseLabel;
   double _bibleTextSize = _kDefaultBibleTextSize;
   bool _showVersesInline = false;
   bool _loading = true;
@@ -155,7 +155,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
         _bible = bible;
         _selectedSource = source;
         _location = location;
-        _focusedVerseNumber = null;
+        _focusedVerseLabel = null;
         _loading = false;
         _loadProgress = null;
         _error = null;
@@ -234,7 +234,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
 
     setState(() {
       _location = chapterLocation;
-      _focusedVerseNumber = target.verse;
+      _focusedVerseLabel = target.verseLabel;
     });
     unawaited(_saveReadingLocation(chapterLocation));
     _revealFocusedVerse();
@@ -709,6 +709,27 @@ class _BibleHomePageState extends State<BibleHomePage> {
       );
     }
 
+    final labelStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      inherit: false,
+      color: preset.verseNumberColor,
+      fontSize: (_bibleTextSize * 0.7).clamp(11, 16),
+      fontWeight: FontWeight.w800,
+      height: 1.55,
+    );
+    // Measure the full source labels at the current accessibility text scale.
+    // A shared gutter keeps text aligned even for labels such as 123a-124b.
+    final labelPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+    var labelWidth = 34.0;
+    for (final verse in chapter.verses) {
+      labelPainter.text = TextSpan(text: verse.verseLabel, style: labelStyle);
+      labelPainter.layout();
+      if (labelPainter.width > labelWidth) labelWidth = labelPainter.width;
+    }
+    labelPainter.dispose();
+
     return Directionality(
       textDirection: direction,
       child: SelectionArea(
@@ -733,6 +754,8 @@ class _BibleHomePageState extends State<BibleHomePage> {
                     preset,
                     compact: _showVersesInline,
                     direction: direction,
+                    labelStyle: labelStyle,
+                    labelWidth: labelWidth.ceilToDouble(),
                   ),
                 const SizedBox(height: 18),
                 _buildBottomNavigation(preset),
@@ -749,12 +772,15 @@ class _BibleHomePageState extends State<BibleHomePage> {
     BibleColorPreset preset, {
     required bool compact,
     required TextDirection direction,
+    required TextStyle labelStyle,
+    required double labelWidth,
   }) {
-    final focused = verse.verseNumber == _focusedVerseNumber;
+    final focused = verse.verseLabel == _focusedVerseLabel;
     return Semantics(
       key: focused ? _focusedVerseKey : null,
       container: true,
-      label: 'Verse ${verse.verseNumber}',
+      label: 'Verse ${verse.verseLabel}',
+      selected: focused,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 240),
         margin: EdgeInsets.only(bottom: compact ? 2 : 8),
@@ -778,16 +804,14 @@ class _BibleHomePageState extends State<BibleHomePage> {
           textDirection: direction,
           children: [
             SizedBox(
-              width: 34,
+              width: labelWidth,
               child: Text(
-                '${verse.verseNumber}',
+                verse.verseLabel,
+                // Keep numeric ranges in source order beside RTL scripture.
+                textDirection: TextDirection.ltr,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: preset.verseNumberColor,
-                  fontSize: (_bibleTextSize * 0.7).clamp(11, 16),
-                  fontWeight: FontWeight.w800,
-                  height: 1.55,
-                ),
+                softWrap: false,
+                style: labelStyle,
               ),
             ),
             const SizedBox(width: 8),

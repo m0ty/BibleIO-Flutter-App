@@ -34,7 +34,7 @@ class _ReferenceDialogState extends State<ReferenceDialog> {
       setState(() {
         _error = error is BibleError
             ? error.message
-            : 'Try a reference such as John 3:16 or Romans 8:1-4.';
+            : 'Try John 3:16, Romans 8:1-4, or John 1:5b.';
       });
     }
   }
@@ -67,7 +67,7 @@ class _ReferenceDialogState extends State<ReferenceDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Book names in multiple languages are supported. Ranges and passage lists open at their first verse.',
+              'Book names in multiple languages are supported, as are sub-verses such as John 1:5b. Ranges and passage lists open at their first verse. Combined verses stay together.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

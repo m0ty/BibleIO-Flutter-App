@@ -221,6 +221,7 @@ class _SettingsPageState extends State<SettingsPage> {
               return const Center(child: Text('No bible files found.'));
             }
             return DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _selectedBiblePath,
               decoration: const InputDecoration(
                 labelText: 'Translation',
@@ -230,7 +231,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   .map(
                     (path) => DropdownMenuItem(
                       value: path,
-                      child: Text(_labelForPath(path)),
+                      child: Text(
+                        _labelForPath(path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),

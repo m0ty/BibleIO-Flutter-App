@@ -597,8 +597,13 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildResultTile(SearchHit hit) {
     final location = BibleLocation.fromVerse(hit.verse);
+    void selectResult() {
+      widget.onResultSelected(location);
+      Navigator.pop(context);
+    }
+
     final resultKey =
-        '${hit.verse.book.name}_${hit.verse.chapterNumber}_${hit.verse.verseNumber}';
+        '${hit.verse.book.name}_${hit.verse.chapterNumber}_${hit.verse.verseLabel}';
     final theme = Theme.of(context);
     final baseStyle = theme.textTheme.bodyMedium;
     final matchStyle = baseStyle?.copyWith(
@@ -610,12 +615,15 @@ class _SearchPageState extends State<SearchPage> {
     return Semantics(
       button: true,
       label: '${hit.reference}. ${hit.verse.text}',
+      textDirection: _scriptureTextDirection,
       excludeSemantics: true,
+      onTap: selectResult,
       child: ListTile(
         key: ValueKey('search_result_$resultKey'),
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         title: Text(
-          hit.reference,
+          _displayReference(hit),
+          textDirection: _scriptureTextDirection,
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
@@ -632,12 +640,22 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          widget.onResultSelected(location);
-          Navigator.pop(context);
-        },
+        onTap: selectResult,
       ),
     );
+  }
+
+  String _displayReference(SearchHit hit) {
+    final reference = hit.reference;
+    if (_scriptureTextDirection != TextDirection.rtl) return reference;
+    final numbers = '${hit.verse.chapterNumber}:${hit.verse.verseLabel}';
+    if (!reference.endsWith(numbers)) return reference;
+    final bookPrefix = reference.substring(
+      0,
+      reference.length - numbers.length,
+    );
+    // Isolate the reference numbers so an RTL book name cannot reverse ranges.
+    return '$bookPrefix\u2066$numbers\u2069';
   }
 
   List<InlineSpan> _highlightedSnippetSpans(

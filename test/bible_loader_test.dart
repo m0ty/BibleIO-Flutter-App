@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:bible_io/bible_io.dart';
 import 'package:flutter_bible/services/bible_loader.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +41,86 @@ void main() {
       isNull,
     );
   });
+
+  test(
+    'every bundled translation passes strict source validation',
+    () async {
+      for (final source in catalog.sources) {
+        final bible = await loadBibleAsset(source.assetPath, source: source);
+        expect(bible.id, source.id, reason: source.assetPath);
+        expect(bible.books, isNotEmpty, reason: source.assetPath);
+        expect(bible.hasSearchIndex, isFalse, reason: source.assetPath);
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'asset loading preserves ordered combined and subdivided entries',
+    () async {
+      const source = BibleSource(
+        id: 'labeled-test',
+        assetPath: 'test/labeled-bible.json',
+        languageName: 'English',
+        languageCode: 'en',
+        translationName: 'Labeled test edition',
+        abbreviation: 'LAB',
+      );
+      final encoded = utf8.encode(
+        json.encode({
+          'language': 'English',
+          'books': {
+            'jo': {
+              'chapters': {
+                '1': {
+                  '5b': 'Second subdivision.',
+                  '6a–7b': 'Combined subdivisions.',
+                  '3–4': 'Combined verse text.',
+                  '5a': 'First subdivision.',
+                },
+              },
+            },
+          },
+        }),
+      );
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final key = utf8.decode(
+          message!.buffer.asUint8List(
+            message.offsetInBytes,
+            message.lengthInBytes,
+          ),
+        );
+        return key == source.assetPath ? ByteData.sublistView(encoded) : null;
+      });
+      addTearDown(
+        () => messenger.setMockMessageHandler('flutter/assets', null),
+      );
+
+      final bible = await loadBibleAsset(source.assetPath, source: source);
+
+      expect(
+        bible
+            .getChapter(BibleBookEnum.john, 1)
+            .verses
+            .map((verse) => verse.verseLabel),
+        ['3–4', '5a', '5b', '6a–7b'],
+      );
+      expect(bible.getPassage('John 1:4').single.text, 'Combined verse text.');
+      expect(bible.getPassage('John 1:5').map((verse) => verse.verseLabel), [
+        '5a',
+        '5b',
+      ]);
+      expect(bible.getPassage('John 1:7a').single.verseLabel, '6a–7b');
+      for (final verse in bible.getChapter(BibleBookEnum.john, 1).verses) {
+        expect(
+          bible.getVerseAt(BibleLocation.fromJson(verse.location.toJson())),
+          verse,
+        );
+      }
+    },
+  );
 
   test(
     'asset loading reports progress and retains a lazy search index',

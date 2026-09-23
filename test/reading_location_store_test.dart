@@ -95,6 +95,52 @@ void main() {
     );
   });
 
+  for (final label in ['3–4', '5b', '6a–7b']) {
+    test(
+      'persists the chapter when navigating to labeled verse $label',
+      () async {
+        final preferences = await preferencesWith({});
+        final location = Verse.labeled(
+          BibleBookEnum.john,
+          3,
+          label,
+          'Labeled source text.',
+        ).location;
+
+        await ReadingLocationStore(preferences).save('edition', location);
+
+        expect(json.decode(preferences.getString('reading_locations_v2')!), {
+          'edition': _johnThree.toJson(),
+        });
+        expect(
+          ReadingLocationStore(
+            preferences,
+          ).restore(_bible(id: 'edition'), _source, allowLegacyPosition: false),
+          _johnThree,
+        );
+      },
+    );
+
+    test('restores chapter from an existing labeled verse $label', () async {
+      final location = Verse.labeled(
+        BibleBookEnum.john,
+        3,
+        label,
+        'Labeled source text.',
+      ).location;
+      final preferences = await preferencesWith({
+        'reading_locations_v2': json.encode({'edition': location.toJson()}),
+      });
+
+      expect(
+        ReadingLocationStore(
+          preferences,
+        ).restore(_bible(id: 'edition'), _source, allowLegacyPosition: false),
+        _johnThree,
+      );
+    });
+  }
+
   test('legacy positions are only used when allowed', () async {
     final preferences = await preferencesWith({
       'last_book_index': 1,

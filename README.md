@@ -15,11 +15,18 @@ browser—no installation required.
 - Read 19 bundled Bible editions across 14 languages without a network connection
 - Browse translations by language and retain a separate reading position for each edition
 - Jump to multilingual references and passage ranges such as `John 3:16` or `Romans 8:1-4`
+- Display combined verse labels (`29–30`) and sub-verses (`5a`, `5b`) with their complete source text
 - Search with phrase, all-word, or any-word matching, filters, highlighting, and pagination
 - Load and prepare large translations in the background with progress feedback
 - Use responsive compact and wide layouts with right-to-left scripture support
 - Customize text size, verse spacing, and reusable reading color presets
 - Select and copy scripture text
+
+Reference navigation also accepts sub-verses and ranges such as `John 1:5b`
+or `John 1:5a-5b` when the edition contains them. Ranges and passage lists open
+at their first matching source entry. Combined entries stay together, and
+search results link to the exact labeled entry. Reading progress is saved
+per chapter for each edition.
 
 ## Supported Languages
 

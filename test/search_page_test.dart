@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show SemanticsAction, SemanticsActionEvent;
 
 import 'package:bible_io/bible_io.dart';
 import 'package:flutter/material.dart';
@@ -100,6 +101,35 @@ void main() {
       }),
     );
   }
+
+  Bible labeledBible({
+    Map<String, String> verses = const {
+      '1–2': 'The light shines over the waters.',
+      '3a': 'The first light appears.',
+      '3b': 'The second light follows.',
+      '4': 'The light is good.',
+    },
+    bool rtl = false,
+  }) {
+    return Bible.fromJson(
+      jsonEncode({
+        'language': rtl ? 'Hebrew' : 'English',
+        'metadata': {'direction': rtl ? 'rtl' : 'ltr'},
+        'books': {
+          'gn': {
+            if (rtl) 'name': 'בראשית',
+            'chapters': {'1': verses},
+          },
+        },
+      }),
+    );
+  }
+
+  Finder resultTile(String label) =>
+      find.byKey(ValueKey('search_result_genesis_1_$label'));
+
+  Finder resultSnippet(String label) =>
+      find.byKey(ValueKey('search_result_snippet_genesis_1_$label'));
 
   setUpAll(() async {
     bible = await loadBibleAsset('bible_io_json/English/eng-kjv-1769.json');
@@ -349,6 +379,198 @@ void main() {
         displayedCount: firstPage.count + secondPage.count,
       ),
     );
+  });
+
+  testWidgets(
+    'range and subverse results have distinct labels and highlights',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1000, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await pumpSearchPage(tester, source: labeledBible());
+      await runSearch(tester, 'light');
+
+      expect(find.text('4 results for "light"'), findsOneWidget);
+      for (final label in ['1–2', '3a', '3b', '4']) {
+        expect(find.text('Genesis 1:$label'), findsOneWidget);
+        expect(resultTile(label), findsOneWidget);
+        final snippet = tester.widget<Text>(resultSnippet(label));
+        final spans = (snippet.textSpan! as TextSpan).children!
+            .cast<TextSpan>();
+        expect(
+          spans
+              .where((span) => span.style?.backgroundColor != null)
+              .map((span) => span.text),
+          ['light'],
+        );
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final label in ['1–2', '3a', '3b']) {
+    testWidgets('selecting result $label retains its exact source location', (
+      WidgetTester tester,
+    ) async {
+      BibleLocation? selectedLocation;
+      await pumpSearchPage(
+        tester,
+        source: labeledBible(),
+        onResultSelected: (location) => selectedLocation = location,
+      );
+      await runSearch(tester, 'light');
+      await tester.scrollUntilVisible(
+        resultTile(label),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(resultTile(label));
+      await tester.pumpAndSettle();
+      await tester.tap(resultTile(label));
+      await tester.pumpAndSettle();
+
+      expect(
+        selectedLocation,
+        BibleLocation(
+          book: BibleBookEnum.genesis,
+          chapter: 1,
+          verse: label == '1–2' ? 1 : 3,
+          verseLabel: label,
+        ),
+      );
+    });
+  }
+
+  testWidgets('screen-reader activation opens the exact subverse', (
+    WidgetTester tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      BibleLocation? selectedLocation;
+      await pumpSearchPage(
+        tester,
+        source: labeledBible(),
+        onResultSelected: (location) => selectedLocation = location,
+      );
+      await runSearch(tester, 'light');
+      await tester.scrollUntilVisible(
+        resultTile('3b'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(resultTile('3b'));
+      await tester.pumpAndSettle();
+
+      final node = tester.getSemantics(
+        find.bySemanticsLabel('Genesis 1:3b. The second light follows.'),
+      );
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.tap,
+          viewId: tester.view.viewId,
+          nodeId: node.id,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        selectedLocation,
+        labeledBible().getVerseByLabel(BibleBookEnum.genesis, 1, '3b').location,
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('pagination retains both subverses across a page boundary', (
+    WidgetTester tester,
+  ) async {
+    final source = labeledBible(
+      verses: {
+        for (var number = 1; number < pageSize; number++)
+          '$number': 'The light shines.',
+        '${pageSize}a': 'The first light appears.',
+        '${pageSize}b': 'The second light follows.',
+        '${pageSize + 1}-${pageSize + 2}': 'The light remains.',
+      },
+    );
+    await pumpSearchPage(tester, source: source);
+    await runSearch(tester, 'light');
+
+    final loadMore = find.byKey(const Key('search_load_more_button'));
+    await tester.scrollUntilVisible(
+      loadMore,
+      600,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(resultTile('${pageSize}a'), findsOneWidget);
+    expect(resultTile('${pageSize}b'), findsNothing);
+    await tester.tap(loadMore);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('End of results'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(resultTile('${pageSize}a'), findsOneWidget);
+    expect(resultTile('${pageSize}b'), findsOneWidget);
+    expect(resultTile('${pageSize + 1}-${pageSize + 2}'), findsOneWidget);
+    expect(loadMore, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('RTL range and subverse results retain Scripture direction', (
+    WidgetTester tester,
+  ) async {
+    final source = labeledBible(
+      rtl: true,
+      verses: {'1–2': 'אור ראשון', '3a': 'אור שני', '3b': 'אור שלישי'},
+    );
+    await pumpSearchPage(tester, source: source);
+    await runSearch(tester, 'אור');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+
+    for (final label in ['1–2', '3a', '3b']) {
+      final title = tester.widget<Text>(
+        find.text('בראשית \u20661:$label\u2069'),
+      );
+      final snippet = tester.widget<Text>(resultSnippet(label));
+      expect(title.textDirection, TextDirection.rtl);
+      expect(snippet.textDirection, TextDirection.rtl);
+      if (label == '1–2') {
+        final painter = TextPainter(
+          text: TextSpan(text: title.data, style: title.style),
+          textDirection: title.textDirection!,
+        )..layout();
+        addTearDown(painter.dispose);
+        final numberOffset = title.data!.indexOf('1:1–2');
+        double leftAt(int offset) => painter
+            .getBoxesForSelection(
+              TextSelection(baseOffset: offset, extentOffset: offset + 1),
+            )
+            .single
+            .left;
+        // Check visual positions: chapter, first verse, then range endpoint.
+        expect(leftAt(numberOffset), lessThan(leftAt(numberOffset + 2)));
+        expect(leftAt(numberOffset + 2), lessThan(leftAt(numberOffset + 4)));
+      }
+      final spans = (snippet.textSpan! as TextSpan).children!.cast<TextSpan>();
+      expect(
+        spans
+            .where((span) => span.style?.backgroundColor != null)
+            .map((span) => span.text),
+        ['אור'],
+      );
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('ignore diacritics option finds equivalent unmarked text', (
