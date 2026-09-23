@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:bible_io/bible_io.dart';
 import 'package:flutter/material.dart';
@@ -8,12 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bible_color_preset.dart';
 import '../services/bible_loader.dart';
+import '../services/reading_location_store.dart';
+import '../widgets/bible_source_picker.dart';
+import '../widgets/reference_dialog.dart';
 import 'search_page.dart';
 import 'settings_page.dart';
 
-const _kLegacyLastBookIndexKey = 'last_book_index';
-const _kLegacyLastChapterKey = 'last_chapter';
-const _kReadingLocationsKey = 'reading_locations_v2';
 const _kBibleFilePathKey = 'bible_file_path';
 const _kBibleTextSizeKey = 'bible_text_size';
 const _kShowVersesInlineKey = 'show_verses_inline';
@@ -47,6 +46,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
   final ScrollController _readerScrollController = ScrollController();
 
   SharedPreferences? _preferences;
+  ReadingLocationStore? _readingLocationStore;
   BibleCatalog? _catalog;
   BibleSource? _selectedSource;
   Bible? _bible;
@@ -60,7 +60,6 @@ class _BibleHomePageState extends State<BibleHomePage> {
   bool _loading = true;
   bool _isSidebarVisible = true;
   String _bookFilter = '';
-  Map<String, Object?> _readingLocations = const {};
 
   @override
   void initState() {
@@ -86,9 +85,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
       _bibleTextSize =
           preferences.getDouble(_kBibleTextSizeKey) ?? _kDefaultBibleTextSize;
       _showVersesInline = preferences.getBool(_kShowVersesInlineKey) ?? false;
-      _readingLocations = _decodeReadingLocations(
-        preferences.getString(_kReadingLocationsKey),
-      );
+      _readingLocationStore = ReadingLocationStore(preferences);
 
       final savedPath =
           preferences.getString(_kBibleFilePathKey) ?? _kDefaultBiblePath;
@@ -120,24 +117,9 @@ class _BibleHomePageState extends State<BibleHomePage> {
     }
   }
 
-  Map<String, Object?> _decodeReadingLocations(String? encoded) {
-    if (encoded == null || encoded.isEmpty) return const {};
-    try {
-      final value = json.decode(encoded);
-      if (value is Map) return Map<String, Object?>.from(value);
-    } on Object {
-      // Corrupt preferences should not prevent the reader from opening.
-    }
-    return const {};
-  }
-
   BibleSource? _sourceForPath(String path) {
     final catalog = _catalog;
-    if (catalog == null) return null;
-    for (final source in catalog.sources) {
-      if (source.assetPath == path) return source;
-    }
-    return null;
+    return catalog == null ? null : bibleSourceForAsset(catalog, path);
   }
 
   Future<bool> _loadBibleSource(
@@ -164,7 +146,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
       );
       if (!mounted || generation != _loadGeneration) return false;
 
-      final location = _restoreLocation(
+      final location = _readingLocationStore!.restore(
         bible,
         source,
         allowLegacyPosition: allowLegacyPosition,
@@ -208,53 +190,6 @@ class _BibleHomePageState extends State<BibleHomePage> {
     }
   }
 
-  BibleLocation? _restoreLocation(
-    Bible bible,
-    BibleSource source, {
-    required bool allowLegacyPosition,
-  }) {
-    final editionId = bible.id ?? source.id;
-    final stored = _readingLocations[editionId];
-    if (stored is Map) {
-      try {
-        final location = BibleLocation.fromJson(
-          Map<String, Object?>.from(stored),
-        ).copyWith(verse: null);
-        if (bible.containsReference(location)) return location;
-      } on Object {
-        // Fall through to the legacy position or the edition's first chapter.
-      }
-    }
-
-    if (allowLegacyPosition && bible.books.isNotEmpty) {
-      final legacyBookIndex =
-          (_preferences?.getInt(_kLegacyLastBookIndexKey) ?? 0).clamp(
-            0,
-            bible.books.length - 1,
-          );
-      final book = bible.books[legacyBookIndex];
-      final legacyChapter = _preferences?.getInt(_kLegacyLastChapterKey) ?? 1;
-      for (final chapter in book.chapters) {
-        if (chapter.chapterNumber == legacyChapter) {
-          return BibleLocation(
-            book: book.bookEnum,
-            chapter: chapter.chapterNumber,
-          );
-        }
-      }
-    }
-
-    for (final book in bible.books) {
-      if (book.chapters.isNotEmpty) {
-        return BibleLocation(
-          book: book.bookEnum,
-          chapter: book.chapters.first.chapterNumber,
-        );
-      }
-    }
-    return null;
-  }
-
   String? get _editionId {
     final bible = _bible;
     final source = _selectedSource;
@@ -264,17 +199,9 @@ class _BibleHomePageState extends State<BibleHomePage> {
 
   Future<void> _saveReadingLocation(BibleLocation location) async {
     final editionId = _editionId;
-    final preferences = _preferences;
-    if (editionId == null || preferences == null) return;
-
-    _readingLocations = {
-      ..._readingLocations,
-      editionId: location.copyWith(verse: null).toJson(),
-    };
-    await preferences.setString(
-      _kReadingLocationsKey,
-      json.encode(_readingLocations),
-    );
+    final store = _readingLocationStore;
+    if (editionId == null || store == null) return;
+    await store.save(editionId, location);
   }
 
   Book? get _selectedBook {
@@ -935,7 +862,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
     if (bible == null) return;
     final location = await showDialog<BibleLocation>(
       context: context,
-      builder: (context) => _ReferenceDialog(bible: bible),
+      builder: (context) => ReferenceDialog(bible: bible),
     );
     if (location != null) _navigateToLocation(location);
   }
@@ -947,7 +874,7 @@ class _BibleHomePageState extends State<BibleHomePage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => _BibleSourcePicker(
+      builder: (context) => BibleSourcePicker(
         catalog: catalog,
         selectedPath: _selectedSource?.assetPath,
       ),
@@ -1122,180 +1049,6 @@ class _ReaderMessage extends StatelessWidget {
               ],
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReferenceDialog extends StatefulWidget {
-  const _ReferenceDialog({required this.bible});
-
-  final Bible bible;
-
-  @override
-  State<_ReferenceDialog> createState() => _ReferenceDialogState();
-}
-
-class _ReferenceDialogState extends State<_ReferenceDialog> {
-  final TextEditingController _controller = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final query = _controller.text.trim();
-    if (query.isEmpty) return;
-    try {
-      final verses = widget.bible.getPassage(query);
-      if (verses.isEmpty) {
-        setState(() => _error = 'No verses were found for that reference.');
-        return;
-      }
-      Navigator.pop(context, verses.first.location);
-    } on Object catch (error) {
-      setState(() {
-        _error = error is BibleError
-            ? error.message
-            : 'Try a reference such as John 3:16 or Romans 8:1-4.';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      icon: const Icon(Icons.short_text_rounded),
-      title: const Text('Go to a passage'),
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              key: const Key('reference_field'),
-              controller: _controller,
-              autofocus: true,
-              textInputAction: TextInputAction.go,
-              decoration: InputDecoration(
-                labelText: 'Bible reference',
-                hintText: 'John 3:16',
-                errorText: _error,
-              ),
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Book names in multiple languages are supported. Ranges and passage lists open at their first verse.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Go')),
-      ],
-    );
-  }
-}
-
-class _BibleSourcePicker extends StatefulWidget {
-  const _BibleSourcePicker({required this.catalog, required this.selectedPath});
-
-  final BibleCatalog catalog;
-  final String? selectedPath;
-
-  @override
-  State<_BibleSourcePicker> createState() => _BibleSourcePickerState();
-}
-
-class _BibleSourcePickerState extends State<_BibleSourcePicker> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final query = _query.trim().toLowerCase();
-    final groups = <String, List<BibleSource>>{};
-    for (final source in widget.catalog.sources) {
-      if (query.isNotEmpty &&
-          !source.translationName.toLowerCase().contains(query) &&
-          !source.languageName.toLowerCase().contains(query) &&
-          !source.abbreviation.toLowerCase().contains(query)) {
-        continue;
-      }
-      groups.putIfAbsent(source.languageName, () => []).add(source);
-    }
-    final languages = groups.keys.toList()..sort();
-
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.82,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-              child: Text(
-                'Choose a translation',
-                style: theme.textTheme.headlineSmall,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: TextField(
-                autofocus: false,
-                decoration: const InputDecoration(
-                  hintText: 'Search language or translation',
-                  prefixIcon: Icon(Icons.search_rounded),
-                ),
-                onChanged: (value) => setState(() => _query = value),
-              ),
-            ),
-            Expanded(
-              child: languages.isEmpty
-                  ? const Center(child: Text('No translations found'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
-                      itemCount: languages.length,
-                      itemBuilder: (context, index) {
-                        final language = languages[index];
-                        final sources = groups[language]!;
-                        return ExpansionTile(
-                          initiallyExpanded:
-                              query.isNotEmpty || sources.length <= 2,
-                          title: Text(language),
-                          subtitle: Text(
-                            '${sources.length} translation${sources.length == 1 ? '' : 's'}',
-                          ),
-                          children: [
-                            for (final source in sources)
-                              ListTile(
-                                leading: source.assetPath == widget.selectedPath
-                                    ? const Icon(Icons.check_circle_rounded)
-                                    : const Icon(Icons.menu_book_outlined),
-                                title: Text(source.translationName),
-                                subtitle: Text(source.abbreviation),
-                                onTap: () => Navigator.pop(context, source),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-            ),
-          ],
         ),
       ),
     );

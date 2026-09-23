@@ -13,18 +13,18 @@ packages:
     dependency: "direct main"
     description:
       name: bible_io
-      sha256: "59fe05a141796ad2859d612d80cdf0c50a60aa96c43fced8dd2ff133be003dca"
+      sha256: "4c204d76951ce00f8b2e048f2a3cb1e4365aa5751db2370abbbbe695d86f7245"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "1.2.0"
   bible_io_references:
     dependency: transitive
     description:
       name: bible_io_references
-      sha256: "200a065e53ddff8051fc2339aeba1c66be8e4d47490b20f41126f0f50247c60f"
+      sha256: "5e1df0439514580e4ba678467cdef9b0b171c2221e9fdb70039906a38305b8eb"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "1.2.0"
   boolean_selector:
     dependency: transitive
     description:

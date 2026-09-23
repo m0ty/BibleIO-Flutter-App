@@ -64,6 +64,16 @@ class _SearchPageState extends State<SearchPage> {
   void didUpdateWidget(covariant SearchPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.bible, widget.bible)) {
+      final selectedBook = _selectedBookFilter?.bookEnum;
+      _selectedBookFilter = null;
+      if (selectedBook != null) {
+        for (final book in widget.bible.books) {
+          if (book.bookEnum == selectedBook) {
+            _selectedBookFilter = book;
+            break;
+          }
+        }
+      }
       _searchGeneration++;
       _resetSearchState();
       unawaited(_prewarmSearchIndex());
@@ -386,7 +396,7 @@ class _SearchPageState extends State<SearchPage> {
     return KeyedSubtree(
       key: const Key('search_book_filter'),
       child: DropdownButtonFormField<Book?>(
-        key: ValueKey(_selectedBookFilter?.bookEnum),
+        key: ObjectKey(_selectedBookFilter),
         initialValue: _selectedBookFilter,
         isExpanded: true,
         menuMaxHeight: 360,

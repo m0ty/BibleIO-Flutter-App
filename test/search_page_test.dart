@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bible_io/bible_io.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bible/pages/search_page.dart';
@@ -77,6 +79,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Bible filterBible({String? genesisName}) {
+    return Bible.fromJson(
+      jsonEncode({
+        'language': 'English',
+        'books': {
+          if (genesisName != null)
+            'gn': {
+              'name': genesisName,
+              'chapters': {
+                '1': {'1': 'God created the earth.'},
+              },
+            },
+          'ex': {
+            'chapters': {
+              '1': {'1': 'God leads his people.'},
+            },
+          },
+        },
+      }),
+    );
+  }
+
   setUpAll(() async {
     bible = await loadBibleAsset('bible_io_json/English/eng-kjv-1769.json');
   });
@@ -118,6 +142,64 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No verses matched your search.'), findsOneWidget);
+  });
+
+  testWidgets('book filter follows the selected book in a replacement Bible', (
+    WidgetTester tester,
+  ) async {
+    await pumpSearchPage(tester, source: filterBible(genesisName: 'Genesis'));
+    await tester.tap(find.text('All books'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Genesis').last);
+    await tester.pumpAndSettle();
+    await runSearch(tester, 'God');
+    expect(find.text('1 result for "God" in Genesis'), findsOneWidget);
+
+    await pumpSearchPage(
+      tester,
+      source: filterBible(genesisName: 'Beginnings'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Beginnings'), findsOneWidget);
+    expect(find.text('Genesis'), findsNothing);
+    expect(find.byKey(const Key('search_result_summary')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('search_query_field')))
+          .controller!
+          .text,
+      'God',
+    );
+
+    await tester.tap(find.byKey(const Key('search_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 result for "God" in Beginnings'), findsOneWidget);
+  });
+
+  testWidgets('book filter clears when a replacement Bible omits the book', (
+    WidgetTester tester,
+  ) async {
+    await pumpSearchPage(tester, source: filterBible(genesisName: 'Genesis'));
+    await tester.tap(find.text('All books'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Genesis').last);
+    await tester.pumpAndSettle();
+    await runSearch(tester, 'God');
+
+    await pumpSearchPage(tester, source: filterBible());
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('All books'), findsOneWidget);
+    expect(find.text('Genesis'), findsNothing);
+    expect(find.byKey(const Key('search_result_summary')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('search_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 result for "God"'), findsOneWidget);
+    expect(find.text('Exodus 1:1'), findsOneWidget);
   });
 
   testWidgets('case sensitive toggle updates search results', (

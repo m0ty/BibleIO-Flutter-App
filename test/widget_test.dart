@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bible/main.dart';
+import 'package:flutter_bible/app.dart';
 import 'package:flutter_bible/models/bible_color_preset.dart';
 import 'package:flutter_bible/pages/settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';

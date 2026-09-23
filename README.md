@@ -124,14 +124,24 @@ provisioning profile.
 
 ## Project Structure
 
-- `lib/main.dart` - application entry point, theme, and color-preset persistence
+- `lib/main.dart` - platform initialization and application entry point
+- `lib/app.dart` - application widget and selected color-preset state
+- `lib/theme/app_theme.dart` - Material theme construction
 - `lib/pages/bible_home_page.dart` - responsive reader and Bible navigation
 - `lib/pages/search_page.dart` - paginated, highlighted scripture search
 - `lib/pages/settings_page.dart` - translation, display, theme, and app settings
 - `lib/services/bible_loader.dart` - catalog lookup and background Bible loading
+- `lib/services/color_preset_store.dart` - color-preset storage and legacy theme migration
+- `lib/services/reading_location_store.dart` - per-edition reading positions and legacy position migration
 - `lib/models/` - reader-specific value types
+- `lib/widgets/` - self-contained dialogs and controls used by pages
 - `bible_io_json/` - bundled translation catalog and Bible content
-- `test/` - loader, reader, settings, and search coverage
+- `test/` - loader, preference migration, reader, settings, and search coverage
+
+Pages own navigation and transient UI state. Services own asset loading and
+stored data formats; they do not depend on pages or widgets. Keep preference
+keys and migration rules in the corresponding store so they can be tested
+without starting the reader. The app uses Flutter's built-in state management.
 
 ## Bible Data and Licensing
 
